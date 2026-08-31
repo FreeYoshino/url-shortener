@@ -1,114 +1,75 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# url-shortener — 短網址服務
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+一個基於 **NestJS** 建構的 URL Shortening Service（短網址服務），靈感來自 [roadmap.sh](https://roadmap.sh) 的 URL Shortening Service 專案。提供長網址縮短、短碼重定向與點擊統計等功能。
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 技術棧
 
-## Description
+| 類別              | 技術                               |
+| ----------------- | ---------------------------------- |
+| 框架              | [NestJS](https://nestjs.com/) 12   |
+| 語言              | TypeScript 6                       |
+| 資料庫            | PostgreSQL（預計搭配 Docker 運行） |
+| ORM               | Prisma（規劃中）                   |
+| 靜態檢查 / 格式化 | oxlint + Prettier                  |
+| 測試              | Jest + Supertest                   |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 核心功能（規劃中）
 
-## Project setup
+- **短網址生成** — `POST /api/shorten`：提交長網址，產生唯一短碼並儲存。
+- **短網址重定向** — `GET /:shortCode`：依短碼查詢並重定向至原始網址。
+- **點擊統計** — `GET /api/urls/:shortCode/stats`：回傳建立時間、原始網址與點擊次數。
+- **請求限流** — 防止 API 被惡意大量請求癱瘓。
 
-```bash
-$ npm install
+## 開發 Roadmap
+
+專案以 Git Flow 精神拆解為 7 個核心功能分支，依序開發：
+
+1. `feature/init-setup` — **專案初始化與基礎環境**（✅ 目前進度）
+   - NestJS 初始化、Linter & Formatter 設定、Docker 環境配置
+2. `feature/prisma-database` — **資料庫架構與 Prisma 整合**
+   - Prisma 安裝與初始化、定義 `Url` 模型、建立遷移檔、`PrismaModule` / `PrismaService`
+3. `feature/url-shortening` — **核心功能：短網址生成 API**
+   - `POST /api/shorten`、URL 輸入驗證、短碼生成演算法、資料庫儲存
+4. `feature/redirection` — **核心功能：短網址重定向**
+   - `GET /:shortCode`、HTTP 301/302 重定向、404 錯誤處理
+5. `feature/analytics` — **進階功能：點擊統計**
+   - 點擊計數器 +1、`GET /api/urls/:shortCode/stats`
+6. `feature/rate-limiting` — **安全防護：請求限流**
+   - 整合 `@nestjs/throttler`、限制 `POST /api/shorten` 請求頻率
+7. `feature/dockerize-app` — **應用程式容器化**
+   - Multi-stage builds 的 Dockerfile、Docker Compose 串聯 App 與 PostgreSQL
+
+## 專案結構
+
+```
+完成後待補
 ```
 
-## Compile and run the project
+## 開始使用
 
 ```bash
-# development
-$ npm run start
+# 安裝依賴
+npm install
 
-# watch mode
-$ npm run start:dev
+# 啟動開發模式（Watch 模式）
+npm run start:dev
 
-# production mode
-$ npm run start:prod
+# 建立正式環境的 build
+npm run build
+
+# 執行正式環境
+npm run start:prod
 ```
 
-## Run tests
+### 其他常用指令
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run lint          # 執行靜態檢查（oxlint）
+npm run format        # 格式化程式碼（Prettier）
+npm run test          # 執行單元測試（Jest）
+npm run test:e2e      # 執行端對端測試
 ```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+[MIT License](./LICENSE)
