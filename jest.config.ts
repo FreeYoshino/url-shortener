@@ -17,7 +17,13 @@ const config: Config = {
   transform: {
     '^.+\\.(t|j)s$': 'ts-jest',
   },
-  moduleNameMapper: pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
+  moduleNameMapper: {
+    // Prisma `prisma-client` generator emits ESM-style imports with a `.js`
+    // extension (e.g. `./internal/class.js`) pointing at `.ts` sources; strip
+    // the extension so ts-jest's CJS pipeline can resolve them.
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+    ...pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
+  },
   collectCoverageFrom: [
     'src/**/*.(t|j)s',
     'libs/**/*.(t|j)s',

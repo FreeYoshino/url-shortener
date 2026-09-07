@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Run type check
         run: npm run typecheck
 
@@ -45,6 +49,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
 
       - name: Run lint
         run: npm run lint
@@ -88,12 +96,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Run tests
         run: npm test
 
   test-e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: url_shortener
+          POSTGRES_PASSWORD: url_shortener
+          POSTGRES_DB: url_shortener_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U url_shortener"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://url_shortener:url_shortener@localhost:5432/url_shortener_test?schema=public
     steps:
       # Pull the code from the repository
       - name: Checkout code
@@ -108,6 +136,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Apply migrations so the AppModule can connect to the schema on boot
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
 
       - name: Run E2E tests
         run: npm run test:e2e
@@ -129,6 +165,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
 
       - name: Build project
         run: npm run build

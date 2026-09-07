@@ -12,5 +12,10 @@
     "typescript/no-floating-promises": "warn",
     "typescript/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
   },
-  "ignorePatterns": ["dist/**", "node_modules/**", "coverage/**"]
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "src/generated/prisma/**"
+  ]
 }

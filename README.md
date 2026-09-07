@@ -24,9 +24,9 @@
 
 專案以 Git Flow 精神拆解為 7 個核心功能分支，依序開發：
 
-1. `feature/init-setup` — **專案初始化與基礎環境**（✅ 目前進度）
+1. `feature/init-setup` — **專案初始化與基礎環境**
    - NestJS 初始化、Linter & Formatter 設定、Docker 環境配置
-2. `feature/prisma-database` — **資料庫架構與 Prisma 整合**
+2. `feature/prisma-database` — **資料庫架構與 Prisma 整合**（✅ 目前進度）
    - Prisma 安裝與初始化、定義 `Url` 模型、建立遷移檔、`PrismaModule` / `PrismaService`
 3. `feature/url-shortening` — **核心功能：短網址生成 API**
    - `POST /api/shorten`、URL 輸入驗證、短碼生成演算法、資料庫儲存
