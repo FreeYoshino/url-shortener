@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Run type check
         run: npm run typecheck
 
@@ -45,6 +49,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
 
       - name: Run lint
         run: npm run lint
@@ -129,6 +137,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
 
       - name: Build project
         run: npm run build
