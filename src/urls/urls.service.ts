@@ -1,8 +1,10 @@
 import { Injectable, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { nanoid } from 'nanoid';
-import { Prisma } from '../generated/prisma/client';
+import { Prisma, Url } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUrlDto } from './dto/create-url.dto';
+import { ResponseUrlDto } from './dto/response-url.dto';
 
 /**
  * Service responsible for managing URL shortening operations.
@@ -10,6 +12,7 @@ import { CreateUrlDto } from './dto/create-url.dto';
 @Injectable()
 export class UrlsService {
   private readonly prisma: PrismaService;
+  private readonly baseUrl: string;
 
   /** Default length of the generated short URL. */
   static SHORT_URL_LENGTH = 8;
@@ -17,8 +20,9 @@ export class UrlsService {
   /** Maximum number of retries for generating a unique short URL. */
   static MAX_RETRIES = 5;
 
-  constructor(prisma: PrismaService) {
+  constructor(prisma: PrismaService, configService: ConfigService) {
     this.prisma = prisma;
+    this.baseUrl = configService.getOrThrow<string>('BASE_URL');
   }
 
   /**
@@ -32,19 +36,19 @@ export class UrlsService {
    *      retries up to {@link UrlsService.MAX_RETRIES} times.
    *
    * @param dto - Data Transfer Object containing the original URL to be shortened.
-   * @returns The existing or newly created URL record.
+   * @returns The created or existing URL Info as a {@link ResponseUrlDto}.
    *
    * @throws {ConflictException} If a unique short URL cannot be generated.
    * @throws {InternalServerErrorException} If a database operation fails.
    */
-  async create(dto: CreateUrlDto) {
+  async create(dto: CreateUrlDto): Promise<ResponseUrlDto> {
     const originalUrl = dto.url;
 
     // Check if the original URL already exists in the database
     const existingUrl = await this.prisma.url.findUnique({
       where: { originalUrl },
     });
-    if (existingUrl) return existingUrl;
+    if (existingUrl) return this.toResponseDto(existingUrl);
 
     // Generate a unique short URL
     for (let attempt = 0; attempt < UrlsService.MAX_RETRIES; attempt++) {
@@ -52,9 +56,10 @@ export class UrlsService {
 
       // Check if the generated short URL already exists in the database
       try {
-        return await this.prisma.url.create({
+        const newUrl = await this.prisma.url.create({
           data: { originalUrl, shortUrl },
         });
+        return this.toResponseDto(newUrl);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           const target = error.meta?.target;
@@ -65,9 +70,12 @@ export class UrlsService {
           if (isShortUrlConflict) continue; // Short URL already exists, try again
 
           // If the conflict is on the original URL, return the existing record
-          return await this.prisma.url.findUnique({
+          const record = await this.prisma.url.findUnique({
             where: { originalUrl },
           });
+          if (record) {
+            return this.toResponseDto(record);
+          }
         }
 
         throw new InternalServerErrorException('Database operation failed.');
@@ -76,5 +84,21 @@ export class UrlsService {
 
     // If all attempts to generate a unique short URL fail, throw a conflict exception
     throw new ConflictException('Unable to generate a unique short URL. Please try again later.');
+  }
+
+  /**
+   * Converts a URL record to a response DTO.
+   *
+   * @param urlRecord - The URL record to convert.
+   * @returns The converted response DTO.
+   */
+  private toResponseDto(urlRecord: Url): ResponseUrlDto {
+    return {
+      originalUrl: urlRecord.originalUrl,
+      shortCode: urlRecord.shortUrl,
+      shortUrl: `${this.baseUrl}/${urlRecord.shortUrl}`,
+      createdAt: urlRecord.createdAt,
+      updatedAt: urlRecord.updatedAt,
+    };
   }
 }

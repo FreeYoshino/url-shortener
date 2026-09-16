@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { UrlsService } from './urls.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { nanoid } from 'nanoid';
@@ -25,7 +26,21 @@ describe('UrlsService', () => {
     },
   };
 
+  // mock ConfigService to avoid actual environment variable access during testing
+  let configService: ConfigService;
+  const mockConfigService = {
+    getOrThrow: jest.fn(),
+  };
+
+  // fixed values used to assert the ResponseUrlDto output
+  const baseUrl = 'http://localhost:3000';
+  const createdAt = new Date('2026-01-01T00:00:00.000Z');
+  const updatedAt = new Date('2026-01-01T00:00:00.000Z');
+
   beforeEach(async () => {
+    // resolve BASE_URL before the service is instantiated
+    mockConfigService.getOrThrow.mockReturnValue(baseUrl);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UrlsService,
@@ -35,11 +50,18 @@ describe('UrlsService', () => {
           provide: PrismaService,
           useValue: mockPrismaService,
         },
+
+        // provide the mock ConfigService instead of the actual one
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
       ],
     }).compile();
 
     service = module.get<UrlsService>(UrlsService);
     prisma = module.get<PrismaService>(PrismaService);
+    configService = module.get<ConfigService>(ConfigService);
 
     jest.clearAllMocks(); // clear mocks before each test to avoid interference
   });
@@ -49,10 +71,10 @@ describe('UrlsService', () => {
   });
 
   describe('create', () => {
-    it('should return a short URL when original URL is already in the database', async () => {
+    it('should return the existing URL info when original URL is already in the database', async () => {
       const dto = { url: 'https://example.com' };
 
-      const existingUrl = { originalUrl: dto.url, shortUrl: 'abc123' };
+      const existingUrl = { originalUrl: dto.url, shortUrl: 'abc123', createdAt, updatedAt };
       mockPrismaService.url.findUnique.mockResolvedValue(existingUrl);
 
       const result = await service.create(dto);
@@ -61,7 +83,13 @@ describe('UrlsService', () => {
         where: { originalUrl: dto.url },
       });
       expect(prisma.url.create).not.toHaveBeenCalled();
-      expect(result).toEqual(existingUrl);
+      expect(result).toEqual({
+        originalUrl: dto.url,
+        shortCode: 'abc123',
+        shortUrl: `${baseUrl}/abc123`,
+        createdAt,
+        updatedAt,
+      });
     });
 
     it('should create a new short URL(use nanoid) when the original URL is not in the database', async () => {
@@ -72,7 +100,7 @@ describe('UrlsService', () => {
       const mockShortUrl = 'abc123';
       mockNanoid.mockReturnValue(mockShortUrl);
 
-      const newUrl = { originalUrl: dto.url, shortUrl: mockShortUrl };
+      const newUrl = { originalUrl: dto.url, shortUrl: mockShortUrl, createdAt, updatedAt };
       mockPrismaService.url.create.mockResolvedValue(newUrl);
 
       const result = await service.create(dto);
@@ -81,7 +109,13 @@ describe('UrlsService', () => {
       expect(prisma.url.create).toHaveBeenCalledWith({
         data: { originalUrl: dto.url, shortUrl: mockShortUrl },
       });
-      expect(result).toEqual(newUrl);
+      expect(result).toEqual({
+        originalUrl: dto.url,
+        shortCode: mockShortUrl,
+        shortUrl: `${baseUrl}/${mockShortUrl}`,
+        createdAt,
+        updatedAt,
+      });
     });
 
     it('should retry generating a unique short URL if P2002 shortUrl conflict occurs', async () => {
@@ -104,18 +138,29 @@ describe('UrlsService', () => {
 
       mockPrismaService.url.create
         .mockRejectedValueOnce(p2002Error) // first attempt fails with P2002
-        .mockResolvedValueOnce({ originalUrl: dto.url, shortUrl: shortUrl2 }); // second attempt succeeds
+        .mockResolvedValueOnce({ originalUrl: dto.url, shortUrl: shortUrl2, createdAt, updatedAt }); // second attempt succeeds
 
       const result = await service.create(dto);
 
       expect(prisma.url.create).toHaveBeenCalledTimes(2);
-      expect(result).toEqual({ originalUrl: dto.url, shortUrl: shortUrl2 });
+      expect(result).toEqual({
+        originalUrl: dto.url,
+        shortCode: shortUrl2,
+        shortUrl: `${baseUrl}/${shortUrl2}`,
+        createdAt,
+        updatedAt,
+      });
     });
 
     it('should return existing URL if P2002 originalUrl conflict occurs', async () => {
       const dto = { url: 'https://example.com' };
 
-      const existingUrl = { originalUrl: dto.url, shortUrl: 'existingShortUrl' };
+      const existingUrl = {
+        originalUrl: dto.url,
+        shortUrl: 'existingShortUrl',
+        createdAt,
+        updatedAt,
+      };
       mockPrismaService.url.findUnique
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(existingUrl); // return existing URL on second call
@@ -138,7 +183,13 @@ describe('UrlsService', () => {
 
       expect(prisma.url.create).toHaveBeenCalledTimes(1);
       expect(prisma.url.findUnique).toHaveBeenCalledTimes(2);
-      expect(result).toEqual(existingUrl);
+      expect(result).toEqual({
+        originalUrl: dto.url,
+        shortCode: 'existingShortUrl',
+        shortUrl: `${baseUrl}/existingShortUrl`,
+        createdAt,
+        updatedAt,
+      });
     });
 
     it('should throw InternalServerErrorException for other database errors', async () => {
