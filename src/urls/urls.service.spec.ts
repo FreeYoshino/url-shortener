@@ -86,7 +86,7 @@ describe('UrlsService', () => {
       expect(result).toEqual({
         originalUrl: dto.url,
         shortCode: 'abc123',
-        shortUrl: `${baseUrl}/abc123`,
+        shortUrl: `${baseUrl}/api/shorten/abc123`,
         createdAt,
         updatedAt,
       });
@@ -112,7 +112,7 @@ describe('UrlsService', () => {
       expect(result).toEqual({
         originalUrl: dto.url,
         shortCode: mockShortUrl,
-        shortUrl: `${baseUrl}/${mockShortUrl}`,
+        shortUrl: `${baseUrl}/api/shorten/${mockShortUrl}`,
         createdAt,
         updatedAt,
       });
@@ -146,7 +146,7 @@ describe('UrlsService', () => {
       expect(result).toEqual({
         originalUrl: dto.url,
         shortCode: shortUrl2,
-        shortUrl: `${baseUrl}/${shortUrl2}`,
+        shortUrl: `${baseUrl}/api/shorten/${shortUrl2}`,
         createdAt,
         updatedAt,
       });
@@ -186,7 +186,7 @@ describe('UrlsService', () => {
       expect(result).toEqual({
         originalUrl: dto.url,
         shortCode: 'existingShortUrl',
-        shortUrl: `${baseUrl}/existingShortUrl`,
+        shortUrl: `${baseUrl}/api/shorten/existingShortUrl`,
         createdAt,
         updatedAt,
       });

@@ -96,7 +96,7 @@ export class UrlsService {
     return {
       originalUrl: urlRecord.originalUrl,
       shortCode: urlRecord.shortUrl,
-      shortUrl: `${this.baseUrl}/${urlRecord.shortUrl}`,
+      shortUrl: `${this.baseUrl}/api/shorten/${urlRecord.shortUrl}`,
       createdAt: urlRecord.createdAt,
       updatedAt: urlRecord.updatedAt,
     };
