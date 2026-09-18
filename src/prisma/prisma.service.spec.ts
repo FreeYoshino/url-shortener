@@ -6,7 +6,6 @@ describe('PrismaService', () => {
   let service: PrismaService;
 
   // mock ConfigService to avoid actual environment variable access during testing
-  let configService: ConfigService;
   const mockConfigService = {
     getOrThrow: jest.fn(),
   };
@@ -25,7 +24,6 @@ describe('PrismaService', () => {
     }).compile();
 
     service = module.get<PrismaService>(PrismaService);
-    configService = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {

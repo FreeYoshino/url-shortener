@@ -27,7 +27,6 @@ describe('UrlsService', () => {
   };
 
   // mock ConfigService to avoid actual environment variable access during testing
-  let configService: ConfigService;
   const mockConfigService = {
     getOrThrow: jest.fn(),
   };
@@ -61,7 +60,6 @@ describe('UrlsService', () => {
 
     service = module.get<UrlsService>(UrlsService);
     prisma = module.get<PrismaService>(PrismaService);
-    configService = module.get<ConfigService>(ConfigService);
 
     jest.clearAllMocks(); // clear mocks before each test to avoid interference
   });
