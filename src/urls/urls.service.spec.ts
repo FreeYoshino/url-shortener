@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, InternalServerErrorException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { UrlsService } from './urls.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { nanoid } from 'nanoid';
@@ -26,20 +25,11 @@ describe('UrlsService', () => {
     },
   };
 
-  // mock ConfigService to avoid actual environment variable access during testing
-  const mockConfigService = {
-    getOrThrow: jest.fn(),
-  };
-
   // fixed values used to assert the ResponseUrlDto output
-  const baseUrl = 'http://localhost:3000';
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const updatedAt = new Date('2026-01-01T00:00:00.000Z');
 
   beforeEach(async () => {
-    // resolve BASE_URL before the service is instantiated
-    mockConfigService.getOrThrow.mockReturnValue(baseUrl);
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UrlsService,
@@ -48,12 +38,6 @@ describe('UrlsService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
-        },
-
-        // provide the mock ConfigService instead of the actual one
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
         },
       ],
     }).compile();
@@ -84,7 +68,6 @@ describe('UrlsService', () => {
       expect(result).toEqual({
         originalUrl: dto.url,
         shortCode: 'abc123',
-        shortUrl: `${baseUrl}/api/shorten/abc123`,
         createdAt,
         updatedAt,
       });
@@ -110,7 +93,6 @@ describe('UrlsService', () => {
       expect(result).toEqual({
         originalUrl: dto.url,
         shortCode: mockShortUrl,
-        shortUrl: `${baseUrl}/api/shorten/${mockShortUrl}`,
         createdAt,
         updatedAt,
       });
@@ -144,7 +126,6 @@ describe('UrlsService', () => {
       expect(result).toEqual({
         originalUrl: dto.url,
         shortCode: shortUrl2,
-        shortUrl: `${baseUrl}/api/shorten/${shortUrl2}`,
         createdAt,
         updatedAt,
       });
@@ -184,7 +165,6 @@ describe('UrlsService', () => {
       expect(result).toEqual({
         originalUrl: dto.url,
         shortCode: 'existingShortUrl',
-        shortUrl: `${baseUrl}/api/shorten/existingShortUrl`,
         createdAt,
         updatedAt,
       });

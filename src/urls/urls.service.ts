@@ -1,5 +1,4 @@
 import { Injectable, ConflictException, InternalServerErrorException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { nanoid } from 'nanoid';
 import { Prisma, Url } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,7 +11,6 @@ import { ResponseUrlDto } from './dto/response-url.dto';
 @Injectable()
 export class UrlsService {
   private readonly prisma: PrismaService;
-  private readonly baseUrl: string;
 
   /** Default length of the generated short URL. */
   static SHORT_URL_LENGTH = 8;
@@ -20,9 +18,8 @@ export class UrlsService {
   /** Maximum number of retries for generating a unique short URL. */
   static MAX_RETRIES = 5;
 
-  constructor(prisma: PrismaService, configService: ConfigService) {
+  constructor(prisma: PrismaService) {
     this.prisma = prisma;
-    this.baseUrl = configService.getOrThrow<string>('BASE_URL');
   }
 
   /**
@@ -96,7 +93,6 @@ export class UrlsService {
     return {
       originalUrl: urlRecord.originalUrl,
       shortCode: urlRecord.shortUrl,
-      shortUrl: `${this.baseUrl}/api/shorten/${urlRecord.shortUrl}`,
       createdAt: urlRecord.createdAt,
       updatedAt: urlRecord.updatedAt,
     };

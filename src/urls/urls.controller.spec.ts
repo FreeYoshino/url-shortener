@@ -20,7 +20,6 @@ describe('UrlsController', () => {
   const responseDto: ResponseUrlDto = {
     originalUrl: dto.url,
     shortCode: 'abc123',
-    shortUrl: 'http://localhost:3000/abc123',
     createdAt,
     updatedAt,
   };
