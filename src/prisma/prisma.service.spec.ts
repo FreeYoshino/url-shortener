@@ -29,4 +29,12 @@ describe('PrismaService', () => {
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
+
+  it('should close the database connection on module destroy', async () => {
+    const disconnect = jest.spyOn(service, '$disconnect').mockResolvedValue(undefined);
+
+    await service.onModuleDestroy();
+
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
 });
