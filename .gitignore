@@ -26,3 +26,6 @@ lerna-debug.log*
 
 # Prisma generated client
 /src/generated/prisma
+
+# Test coverage
+/coverage

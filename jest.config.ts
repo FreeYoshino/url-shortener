@@ -26,8 +26,11 @@ const config: Config = {
   },
   collectCoverageFrom: [
     'src/**/*.(t|j)s',
-    'libs/**/*.(t|j)s',
-    'apps/**/*.(t|j)s',
+    // The generated Prisma client, Nest module wiring and the bootstrap file
+    // are not exercised by the unit tests, so they are excluded here.
+    '!src/generated/**',
+    '!src/**/*.module.ts',
+    '!src/main.ts',
   ],
   coverageDirectory: './coverage',
   testEnvironment: 'node',
