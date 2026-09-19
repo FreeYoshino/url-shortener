@@ -5,13 +5,40 @@ import { PrismaService } from '../prisma/prisma.service';
 import { nanoid } from 'nanoid';
 import { Prisma } from '../generated/prisma/client';
 
-// mock naoid package to avoid generating actual short URLs during testing
+// mock naoid package to avoid generating actual short codes during testing
 jest.mock('nanoid', () => {
   return {
     nanoid: jest.fn(),
   };
 });
 const mockNanoid = nanoid as jest.Mock;
+
+/**
+ * Builds a `P2002` error the way Prisma 7 + `@prisma/adapter-pg` actually
+ * raises it.
+ *
+ * Note there is no `meta.target`: under the driver adapter that field is
+ * `undefined` and the constraint only appears at
+ * `meta.driverAdapterError.cause.constraint.index`. The service must not depend
+ * on either, which is exactly what these tests pin down.
+ */
+function uniqueViolation() {
+  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: '0.0.0',
+    meta: {
+      modelName: 'Url',
+      driverAdapterError: {
+        cause: {
+          originalCode: '23505',
+          kind: 'UniqueConstraintViolation',
+          constraint: { index: 'Url_shortCode_key' },
+          table: 'Url',
+        },
+      },
+    },
+  });
+}
 
 describe('UrlsService', () => {
   let service: UrlsService;
@@ -56,7 +83,7 @@ describe('UrlsService', () => {
     it('should return the existing URL info when original URL is already in the database', async () => {
       const dto = { url: 'https://example.com' };
 
-      const existingUrl = { originalUrl: dto.url, shortUrl: 'abc123', createdAt, updatedAt };
+      const existingUrl = { originalUrl: dto.url, shortCode: 'abc123', createdAt, updatedAt };
       mockPrismaService.url.findUnique.mockResolvedValue(existingUrl);
 
       const result = await service.create(dto);
@@ -73,59 +100,57 @@ describe('UrlsService', () => {
       });
     });
 
-    it('should create a new short URL(use nanoid) when the original URL is not in the database', async () => {
+    it('should create a new short code (use nanoid) when the original URL is not in the database', async () => {
       const dto = { url: 'https://example.com' };
 
       mockPrismaService.url.findUnique.mockResolvedValue(null);
 
-      const mockShortUrl = 'abc123';
-      mockNanoid.mockReturnValue(mockShortUrl);
+      const mockShortCode = 'abc123';
+      mockNanoid.mockReturnValue(mockShortCode);
 
-      const newUrl = { originalUrl: dto.url, shortUrl: mockShortUrl, createdAt, updatedAt };
+      const newUrl = { originalUrl: dto.url, shortCode: mockShortCode, createdAt, updatedAt };
       mockPrismaService.url.create.mockResolvedValue(newUrl);
 
       const result = await service.create(dto);
 
-      expect(mockNanoid).toHaveBeenCalledWith(UrlsService.SHORT_URL_LENGTH);
+      expect(mockNanoid).toHaveBeenCalledWith(UrlsService.SHORT_CODE_LENGTH);
       expect(prisma.url.create).toHaveBeenCalledWith({
-        data: { originalUrl: dto.url, shortUrl: mockShortUrl },
+        data: { originalUrl: dto.url, shortCode: mockShortCode },
       });
       expect(result).toEqual({
         originalUrl: dto.url,
-        shortCode: mockShortUrl,
+        shortCode: mockShortCode,
         createdAt,
         updatedAt,
       });
     });
 
-    it('should retry generating a unique short URL if P2002 shortUrl conflict occurs', async () => {
+    it('should retry generating a unique short code if P2002 shortCode conflict occurs', async () => {
       const dto = { url: 'https://example.com' };
 
+      // the lookup misses on both calls: the first is the pre-flight check,
+      // the second is made from the catch block to rule out an originalUrl clash
       mockPrismaService.url.findUnique.mockResolvedValue(null);
 
-      const shortUrl1 = 'conflict1';
-      const shortUrl2 = 'success2';
-      mockNanoid.mockReturnValueOnce(shortUrl1).mockReturnValueOnce(shortUrl2);
-
-      const p2002Error = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed on the fields: (`shortUrl`)',
-        {
-          code: 'P2002',
-          clientVersion: '0.0.0',
-          meta: { target: ['shortUrl'] },
-        },
-      );
+      const shortCode1 = 'conflict1';
+      const shortCode2 = 'success2';
+      mockNanoid.mockReturnValueOnce(shortCode1).mockReturnValueOnce(shortCode2);
 
       mockPrismaService.url.create
-        .mockRejectedValueOnce(p2002Error) // first attempt fails with P2002
-        .mockResolvedValueOnce({ originalUrl: dto.url, shortUrl: shortUrl2, createdAt, updatedAt }); // second attempt succeeds
+        .mockRejectedValueOnce(uniqueViolation()) // first attempt fails with P2002
+        .mockResolvedValueOnce({
+          originalUrl: dto.url,
+          shortCode: shortCode2,
+          createdAt,
+          updatedAt,
+        }); // second attempt succeeds
 
       const result = await service.create(dto);
 
       expect(prisma.url.create).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
         originalUrl: dto.url,
-        shortCode: shortUrl2,
+        shortCode: shortCode2,
         createdAt,
         updatedAt,
       });
@@ -136,7 +161,7 @@ describe('UrlsService', () => {
 
       const existingUrl = {
         originalUrl: dto.url,
-        shortUrl: 'existingShortUrl',
+        shortCode: 'existingCode',
         createdAt,
         updatedAt,
       };
@@ -144,19 +169,10 @@ describe('UrlsService', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(existingUrl); // return existing URL on second call
 
-      const shortUrl1 = 'conflict1';
-      mockNanoid.mockReturnValueOnce(shortUrl1);
+      const shortCode1 = 'conflict1';
+      mockNanoid.mockReturnValueOnce(shortCode1);
 
-      const p2002Error = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed on the fields: (`originalUrl`)',
-        {
-          code: 'P2002',
-          clientVersion: '0.0.0',
-          meta: { target: ['originalUrl'] },
-        },
-      );
-
-      mockPrismaService.url.create.mockRejectedValueOnce(p2002Error); // first attempt fails with P2002
+      mockPrismaService.url.create.mockRejectedValueOnce(uniqueViolation()); // first attempt fails with P2002
 
       const result = await service.create(dto);
 
@@ -164,7 +180,7 @@ describe('UrlsService', () => {
       expect(prisma.url.findUnique).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
         originalUrl: dto.url,
-        shortCode: 'existingShortUrl',
+        shortCode: 'existingCode',
         createdAt,
         updatedAt,
       });
@@ -175,30 +191,21 @@ describe('UrlsService', () => {
 
       mockPrismaService.url.findUnique.mockResolvedValue(null);
 
-      mockNanoid.mockReturnValue('anyShortUrl');
+      mockNanoid.mockReturnValue('anyShortCode');
 
       mockPrismaService.url.create.mockRejectedValueOnce(new Error('Database error'));
 
       await expect(service.create(dto)).rejects.toThrow(InternalServerErrorException);
     });
 
-    it('should throw ConflictException if unable to generate a unique short URL after max retries', async () => {
+    it('should throw ConflictException if unable to generate a unique short code after max retries', async () => {
       const dto = { url: 'https://example.com' };
 
       mockPrismaService.url.findUnique.mockResolvedValue(null);
 
-      mockNanoid.mockReturnValue('conflictShortUrl');
+      mockNanoid.mockReturnValue('conflictCode');
 
-      const p2002Error = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed on the fields: (`shortUrl`)',
-        {
-          code: 'P2002',
-          clientVersion: '0.0.0',
-          meta: { target: ['shortUrl'] },
-        },
-      );
-
-      mockPrismaService.url.create.mockRejectedValue(p2002Error); // always fail with P2002
+      mockPrismaService.url.create.mockRejectedValue(uniqueViolation()); // always fail with P2002
 
       await expect(service.create(dto)).rejects.toThrow(ConflictException);
       expect(mockNanoid).toHaveBeenCalledTimes(UrlsService.MAX_RETRIES);
