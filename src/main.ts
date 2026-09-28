@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -20,7 +20,14 @@ async function bootstrap() {
   );
 
   // Set a global prefix for all routes
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: [
+      {
+        path: ':shortCode',
+        method: RequestMethod.GET,
+      },
+    ],
+  });
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
