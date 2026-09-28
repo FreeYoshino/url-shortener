@@ -1,4 +1,9 @@
-import { Injectable, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { nanoid } from 'nanoid';
 import { Prisma, Url } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -95,5 +100,25 @@ export class UrlsService {
       createdAt: urlRecord.createdAt,
       updatedAt: urlRecord.updatedAt,
     };
+  }
+
+  /**
+   * Finds a URL by its short code.
+   *
+   * @param shortCode The short code to search for.
+   * @returns A promise resolving to the found URL or rejecting with a NotFoundException if not found.
+   *
+   * @throws {NotFoundException} If the short code does not exist in the database.
+   */
+  async findByShortCode(shortCode: string): Promise<ResponseUrlDto> {
+    const urlRecord = await this.prisma.url.findUnique({
+      where: { shortCode },
+    });
+
+    if (!urlRecord) {
+      throw new NotFoundException(`Short Code '${shortCode}' not found.`);
+    }
+
+    return this.toResponseDto(urlRecord);
   }
 }
