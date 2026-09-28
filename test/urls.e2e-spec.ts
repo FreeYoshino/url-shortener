@@ -1,10 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { nanoid } from 'nanoid';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { setupApp } from '../src/setup-app';
 
 // Wrapped rather than replaced: every test keeps real nanoid output, and only
 // the collision test overrides a single call to force a duplicate short code.
@@ -30,17 +31,7 @@ describe('UrlsController (e2e)', () => {
     // Replicate the production bootstrap (src/main.ts). Test.createTestingModule
     // does NOT apply the global pipe or the `api` prefix on its own, so without
     // this the validation rules would silently not run.
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-        transformOptions: {
-          enableImplicitConversion: true,
-        },
-      }),
-    );
-    app.setGlobalPrefix('api');
+    setupApp(app);
 
     await app.init();
 
