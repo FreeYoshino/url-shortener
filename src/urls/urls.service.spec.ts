@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { UrlsService } from './urls.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { nanoid } from 'nanoid';
@@ -209,6 +209,41 @@ describe('UrlsService', () => {
 
       await expect(service.create(dto)).rejects.toThrow(ConflictException);
       expect(mockNanoid).toHaveBeenCalledTimes(UrlsService.MAX_RETRIES);
+    });
+  });
+
+  describe('findByShortCode', () => {
+    it('should return the URL info when the short code exists', async () => {
+      const shortCode = 'shortCode123';
+      const urlRecord = {
+        originalUrl: 'https://example.com',
+        shortCode,
+        createdAt,
+        updatedAt,
+      };
+
+      mockPrismaService.url.findUnique.mockResolvedValue(urlRecord);
+
+      const result = await service.findByShortCode(shortCode);
+
+      expect(prisma.url.findUnique).toHaveBeenCalledWith({
+        where: { shortCode },
+      });
+      expect(result).toEqual({
+        originalUrl: 'https://example.com',
+        shortCode,
+        createdAt,
+        updatedAt,
+      });
+    });
+
+    it('should throw NotFoundException when the short code does not exist', async () => {
+      const shortCode = 'nonExistentCode';
+      mockPrismaService.url.findUnique.mockResolvedValue(null);
+
+      await expect(service.findByShortCode(shortCode)).rejects.toThrow(
+        new NotFoundException(`Short Code '${shortCode}' not found.`),
+      );
     });
   });
 });
