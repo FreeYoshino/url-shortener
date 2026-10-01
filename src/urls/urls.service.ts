@@ -9,6 +9,7 @@ import { Prisma, Url } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUrlDto } from './dto/create-url.dto';
 import { ResponseUrlDto } from './dto/response-url.dto';
+import { UpdateUrlDto } from './dto/update-url.dto';
 
 /**
  * Service responsible for managing URL shortening operations.
@@ -120,5 +121,55 @@ export class UrlsService {
     }
 
     return this.toResponseDto(urlRecord);
+  }
+
+  /**
+   * Deletes a URL record by its short code.
+   *
+   * @param shortCode - The short code of the URL record to delete.
+   * @returns A promise that resolves when the URL record has been deleted.
+   *
+   * @throws {NotFoundException} If the short code does not exist in the database.
+   */
+  async delete(shortCode: string): Promise<void> {
+    try {
+      await this.prisma.url.delete({
+        where: { shortCode },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        throw new NotFoundException(`Short Code '${shortCode}' not found.`);
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Updates a URL record by its short code.
+   *
+   * @param shortCode - The short code of the URL record to update.
+   * @param updateDto - The data to update the URL record with.
+   * @returns A promise resolving to the updated URL record or rejecting with a NotFoundException if not found.
+   *
+   * @throws {NotFoundException} If the short code does not exist in the database.
+   */
+  async update(shortCode: string, updateDto: UpdateUrlDto): Promise<ResponseUrlDto> {
+    try {
+      const urlRecord = await this.prisma.url.update({
+        where: { shortCode },
+        data: {
+          originalUrl: updateDto.url,
+        },
+      });
+
+      return this.toResponseDto(urlRecord);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        throw new NotFoundException(`Short Code '${shortCode}' not found.`);
+      }
+
+      throw error;
+    }
   }
 }

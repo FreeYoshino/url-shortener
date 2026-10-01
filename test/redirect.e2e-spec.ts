@@ -41,7 +41,7 @@ describe('RedirectController (e2e)', () => {
     it('should redirect to the original URL with HttpStatus.FOUND (302) when the short code exists', async () => {
       const originalUrl = 'https://github.com/FreeYoshino/url-shortener';
       const createResponse = await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: originalUrl })
         .expect(HttpStatus.CREATED);
 
@@ -61,7 +61,7 @@ describe('RedirectController (e2e)', () => {
     it('should NOT resolve the redirect under the /api prefix', async () => {
       const originalUrl = 'https://github.com/FreeYoshino/url-shortener';
       const createResponse = await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: originalUrl })
         .expect(HttpStatus.CREATED);
 

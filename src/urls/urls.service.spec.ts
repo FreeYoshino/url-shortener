@@ -49,6 +49,8 @@ describe('UrlsService', () => {
     url: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      delete: jest.fn(),
+      update: jest.fn(),
     },
   };
 
@@ -244,6 +246,85 @@ describe('UrlsService', () => {
       await expect(service.findByShortCode(shortCode)).rejects.toThrow(
         new NotFoundException(`Short Code '${shortCode}' not found.`),
       );
+    });
+  });
+
+  describe('delete', () => {
+    it('should call the delete method when the short code exists', async () => {
+      const shortCode = 'abc1234';
+      mockPrismaService.url.delete.mockResolvedValue({ id: 1, shortCode });
+
+      await expect(service.delete(shortCode)).resolves.not.toThrow();
+      expect(prisma.url.delete).toHaveBeenCalledWith({ where: { shortCode } });
+    });
+
+    it('should throw NotFoundException when the short code does not exist(P2025 occurrence)', async () => {
+      const shortCode = 'nonExistentCode';
+      mockPrismaService.url.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: '0.0.0',
+        }),
+      );
+
+      await expect(service.delete(shortCode)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw error for other database errors', async () => {
+      const shortCode = 'abc1234';
+      mockPrismaService.url.delete.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.delete(shortCode)).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('update', () => {
+    it('should update the URL when the short code exists', async () => {
+      const shortCode = 'abc1234';
+      const updateDto = { url: 'https://updated.com' };
+      const updatedUrlRecord = {
+        originalUrl: updateDto.url,
+        shortCode,
+        createdAt,
+        updatedAt,
+      };
+
+      mockPrismaService.url.update.mockResolvedValue(updatedUrlRecord);
+
+      const result = await service.update(shortCode, updateDto);
+
+      expect(prisma.url.update).toHaveBeenCalledWith({
+        where: { shortCode },
+        data: { originalUrl: updateDto.url },
+      });
+      expect(result).toEqual({
+        originalUrl: updateDto.url,
+        shortCode,
+        createdAt,
+        updatedAt,
+      });
+    });
+
+    it('should throw NotFoundException when the short code does not exist', async () => {
+      const shortCode = 'nonExistentCode';
+      const updateDto = { url: 'https://updated.com' };
+
+      mockPrismaService.url.update.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: '0.0.0',
+        }),
+      );
+
+      await expect(service.update(shortCode, updateDto)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw error for other database errors', async () => {
+      const shortCode = 'abc1234';
+      const updateDto = { url: 'https://updated.com' };
+      mockPrismaService.url.update.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.update(shortCode, updateDto)).rejects.toThrow('Database error');
     });
   });
 });

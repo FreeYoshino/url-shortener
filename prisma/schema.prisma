@@ -25,6 +25,8 @@ model Url {
 model UrlClick {
   id        String   @id @default(uuid())
   urlId     String // 外鍵
-  url       Url      @relation(fields: [urlId], references: [id])
+  url       Url      @relation(fields: [urlId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  @@index([urlId])
 }

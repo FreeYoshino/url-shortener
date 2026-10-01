@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, HttpStatus } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { nanoid } from 'nanoid';
@@ -39,8 +39,8 @@ describe('UrlsController (e2e)', () => {
   });
 
   beforeEach(async () => {
-    // Start every test from an empty table. `UrlClick.urlId -> Url.id` is
-    // ON DELETE RESTRICT, so both tables must be named (or CASCADE used).
+    // Start every test from an empty table. `UrlClick` is named explicitly so
+    // the truncation does not depend on the FK's ON DELETE action.
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "UrlClick", "Url" CASCADE');
 
     mockNanoid.mockClear();
@@ -51,12 +51,12 @@ describe('UrlsController (e2e)', () => {
     await app.close();
   });
 
-  describe('POST /api/shorten', () => {
+  describe('POST /api/urls', () => {
     it('should create a shortened URL and return the full DTO', async () => {
       const res = await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'https://example.com' })
-        .expect(201);
+        .expect(HttpStatus.CREATED);
 
       // exact response shape: the four DTO fields and nothing else
       expect(Object.keys(res.body).sort()).toEqual(
@@ -72,9 +72,9 @@ describe('UrlsController (e2e)', () => {
 
     it('should persist the record in the database', async () => {
       const res = await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'https://example.com' })
-        .expect(201);
+        .expect(HttpStatus.CREATED);
 
       const record = await prisma.url.findUnique({
         where: { originalUrl: 'https://example.com' },
@@ -87,8 +87,14 @@ describe('UrlsController (e2e)', () => {
     it('should return the same short code when the same URL is submitted twice', async () => {
       const dto = { url: 'https://example.com' };
 
-      const first = await request(app.getHttpServer()).post('/api/shorten').send(dto).expect(201);
-      const second = await request(app.getHttpServer()).post('/api/shorten').send(dto).expect(201);
+      const first = await request(app.getHttpServer())
+        .post('/api/urls')
+        .send(dto)
+        .expect(HttpStatus.CREATED);
+      const second = await request(app.getHttpServer())
+        .post('/api/urls')
+        .send(dto)
+        .expect(HttpStatus.CREATED);
 
       expect(second.body.shortCode).toBe(first.body.shortCode);
 
@@ -111,9 +117,9 @@ describe('UrlsController (e2e)', () => {
       mockNanoid.mockReturnValueOnce(takenCode);
 
       const res = await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'https://fresh.example.com' })
-        .expect(201);
+        .expect(HttpStatus.CREATED);
 
       expect(res.body.shortCode).not.toBe(takenCode);
       expect(res.body.originalUrl).toBe('https://fresh.example.com');
@@ -124,45 +130,118 @@ describe('UrlsController (e2e)', () => {
 
     it('should not match the route without the global /api prefix', async () => {
       await request(app.getHttpServer())
-        .post('/shorten')
+        .post('/urls')
         .send({ url: 'https://example.com' })
-        .expect(404);
+        .expect(HttpStatus.NOT_FOUND);
     });
   });
 
   describe('request validation', () => {
     it('should reject a missing url with 400', async () => {
-      await request(app.getHttpServer()).post('/api/shorten').send({}).expect(400);
+      await request(app.getHttpServer()).post('/api/urls').send({}).expect(HttpStatus.BAD_REQUEST);
     });
 
     it('should reject a malformed url with 400', async () => {
       await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'not-a-url' })
-        .expect(400);
+        .expect(HttpStatus.BAD_REQUEST);
     });
 
     it('should reject a url without a protocol with 400', async () => {
       await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'example.com' })
-        .expect(400);
+        .expect(HttpStatus.BAD_REQUEST);
     });
 
     it('should reject unknown properties (forbidNonWhitelisted) with 400', async () => {
       await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'https://example.com', foo: 'bar' })
-        .expect(400);
+        .expect(HttpStatus.BAD_REQUEST);
     });
 
     it('should not create a record when validation fails', async () => {
       await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'not-a-url' })
-        .expect(400);
+        .expect(HttpStatus.BAD_REQUEST);
 
       await expect(prisma.url.count()).resolves.toBe(0);
+    });
+  });
+
+  describe('DELETE /api/urls/:shortCode', () => {
+    it('should delete an existing URL record', async () => {
+      const record = await prisma.url.create({
+        data: { originalUrl: 'https://example.com', shortCode: 'shortCode123' },
+      });
+
+      await request(app.getHttpServer())
+        .delete(`/api/urls/${record.shortCode}`)
+        .expect(HttpStatus.NO_CONTENT);
+
+      // verify the record is gone
+      const deleted = await prisma.url.findUnique({
+        where: { shortCode: record.shortCode },
+      });
+      expect(deleted).toBeNull();
+    });
+
+    it('should return 404 when deleting a non-existent short code', async () => {
+      await request(app.getHttpServer())
+        .delete('/api/urls/nonexistent')
+        .expect(HttpStatus.NOT_FOUND);
+    });
+  });
+
+  describe('PUT /api/urls/:shortCode', () => {
+    it('should update an existing URL record', async () => {
+      const record = await prisma.url.create({
+        data: { originalUrl: 'https://example.com', shortCode: 'shortCode123' },
+      });
+
+      const updatedUrl = 'https://updated.com';
+      const res = await request(app.getHttpServer())
+        .put(`/api/urls/${record.shortCode}`)
+        .send({ url: updatedUrl })
+        .expect(HttpStatus.OK);
+
+      expect(res.body.originalUrl).toBe(updatedUrl);
+      expect(res.body.shortCode).toBe(record.shortCode);
+
+      // verify the record is updated in the database
+      const updatedRecord = await prisma.url.findUnique({
+        where: { shortCode: record.shortCode },
+      });
+      expect(updatedRecord?.originalUrl).toBe(updatedUrl);
+    });
+
+    it('should return 404 when updating a non-existent short code', async () => {
+      await request(app.getHttpServer())
+        .put('/api/urls/nonexistent')
+        .send({ url: 'https://updated.com' })
+        .expect(HttpStatus.NOT_FOUND);
+    });
+  });
+
+  describe('GET /api/urls/:shortCode', () => {
+    it('should return an existing URL record', async () => {
+      const record = await prisma.url.create({
+        data: { originalUrl: 'https://example.com', shortCode: 'shortCode123' },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/urls/${record.shortCode}`)
+        .expect(HttpStatus.OK);
+
+      expect(res.body.originalUrl).toBe(record.originalUrl);
+      expect(res.body.shortCode).toBe(record.shortCode);
+    });
+
+    it('should return 404 when fetching a non-existent short code', async () => {
+      await request(app.getHttpServer()).get('/api/urls/nonexistent').expect(HttpStatus.NOT_FOUND);
     });
   });
 });

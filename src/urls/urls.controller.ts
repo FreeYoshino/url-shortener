@@ -1,8 +1,19 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Delete,
+  HttpStatus,
+  Param,
+  HttpCode,
+  Put,
+  Get,
+} from '@nestjs/common';
 import { CreateUrlDto } from './dto/create-url.dto';
+import { UpdateUrlDto } from './dto/update-url.dto';
 import { UrlsService } from './urls.service';
 
-@Controller('shorten')
+@Controller('urls')
 export class UrlsController {
   private readonly urlsService: UrlsService;
 
@@ -13,5 +24,21 @@ export class UrlsController {
   @Post()
   create(@Body() dto: CreateUrlDto) {
     return this.urlsService.create(dto);
+  }
+
+  @Delete(':shortCode')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(@Param('shortCode') shortCode: string) {
+    await this.urlsService.delete(shortCode);
+  }
+
+  @Put(':shortCode')
+  update(@Param('shortCode') shortCode: string, @Body() dto: UpdateUrlDto) {
+    return this.urlsService.update(shortCode, dto);
+  }
+
+  @Get(':shortCode')
+  get(@Param('shortCode') shortCode: string) {
+    return this.urlsService.findByShortCode(shortCode);
   }
 }
