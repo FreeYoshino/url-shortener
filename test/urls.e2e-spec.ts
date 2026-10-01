@@ -39,8 +39,8 @@ describe('UrlsController (e2e)', () => {
   });
 
   beforeEach(async () => {
-    // Start every test from an empty table. `UrlClick.urlId -> Url.id` is
-    // ON DELETE RESTRICT, so both tables must be named (or CASCADE used).
+    // Start every test from an empty table. `UrlClick` is named explicitly so
+    // the truncation does not depend on the FK's ON DELETE action.
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "UrlClick", "Url" CASCADE');
 
     mockNanoid.mockClear();
