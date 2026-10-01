@@ -121,4 +121,26 @@ export class UrlsService {
 
     return this.toResponseDto(urlRecord);
   }
+
+  /**
+   * Deletes a URL record by its short code.
+   *
+   * @param shortCode - The short code of the URL record to delete.
+   * @returns A promise that resolves when the URL record has been deleted.
+   *
+   * @throws {NotFoundException} If the short code does not exist in the database.
+   */
+  async delete(shortCode: string): Promise<void> {
+    try {
+      await this.prisma.url.delete({
+        where: { shortCode },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        throw new NotFoundException(`Short Code '${shortCode}' not found.`);
+      }
+
+      throw error;
+    }
+  }
 }

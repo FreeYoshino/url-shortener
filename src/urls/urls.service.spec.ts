@@ -49,6 +49,7 @@ describe('UrlsService', () => {
     url: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      delete: jest.fn(),
     },
   };
 
@@ -244,6 +245,35 @@ describe('UrlsService', () => {
       await expect(service.findByShortCode(shortCode)).rejects.toThrow(
         new NotFoundException(`Short Code '${shortCode}' not found.`),
       );
+    });
+  });
+
+  describe('delete', () => {
+    it('should call the delete method when the short code exists', async () => {
+      const shortCode = 'abc1234';
+      mockPrismaService.url.delete.mockResolvedValue({ id: 1, shortCode });
+
+      await expect(service.delete(shortCode)).resolves.not.toThrow();
+      expect(prisma.url.delete).toHaveBeenCalledWith({ where: { shortCode } });
+    });
+
+    it('should throw NotFoundException when the short code does not exist(P2025 occurrence)', async () => {
+      const shortCode = 'nonExistentCode';
+      mockPrismaService.url.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Record not found', {
+          code: 'P2025',
+          clientVersion: '0.0.0',
+        }),
+      );
+
+      await expect(service.delete(shortCode)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw error for other database errors', async () => {
+      const shortCode = 'abc1234';
+      mockPrismaService.url.delete.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.delete(shortCode)).rejects.toThrow('Database error');
     });
   });
 });
