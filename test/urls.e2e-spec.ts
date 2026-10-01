@@ -51,10 +51,10 @@ describe('UrlsController (e2e)', () => {
     await app.close();
   });
 
-  describe('POST /api/shorten', () => {
+  describe('POST /api/urls', () => {
     it('should create a shortened URL and return the full DTO', async () => {
       const res = await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'https://example.com' })
         .expect(201);
 
@@ -72,7 +72,7 @@ describe('UrlsController (e2e)', () => {
 
     it('should persist the record in the database', async () => {
       const res = await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'https://example.com' })
         .expect(201);
 
@@ -87,8 +87,8 @@ describe('UrlsController (e2e)', () => {
     it('should return the same short code when the same URL is submitted twice', async () => {
       const dto = { url: 'https://example.com' };
 
-      const first = await request(app.getHttpServer()).post('/api/shorten').send(dto).expect(201);
-      const second = await request(app.getHttpServer()).post('/api/shorten').send(dto).expect(201);
+      const first = await request(app.getHttpServer()).post('/api/urls').send(dto).expect(201);
+      const second = await request(app.getHttpServer()).post('/api/urls').send(dto).expect(201);
 
       expect(second.body.shortCode).toBe(first.body.shortCode);
 
@@ -111,7 +111,7 @@ describe('UrlsController (e2e)', () => {
       mockNanoid.mockReturnValueOnce(takenCode);
 
       const res = await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'https://fresh.example.com' })
         .expect(201);
 
@@ -124,7 +124,7 @@ describe('UrlsController (e2e)', () => {
 
     it('should not match the route without the global /api prefix', async () => {
       await request(app.getHttpServer())
-        .post('/shorten')
+        .post('/urls')
         .send({ url: 'https://example.com' })
         .expect(404);
     });
@@ -132,35 +132,26 @@ describe('UrlsController (e2e)', () => {
 
   describe('request validation', () => {
     it('should reject a missing url with 400', async () => {
-      await request(app.getHttpServer()).post('/api/shorten').send({}).expect(400);
+      await request(app.getHttpServer()).post('/api/urls').send({}).expect(400);
     });
 
     it('should reject a malformed url with 400', async () => {
-      await request(app.getHttpServer())
-        .post('/api/shorten')
-        .send({ url: 'not-a-url' })
-        .expect(400);
+      await request(app.getHttpServer()).post('/api/urls').send({ url: 'not-a-url' }).expect(400);
     });
 
     it('should reject a url without a protocol with 400', async () => {
-      await request(app.getHttpServer())
-        .post('/api/shorten')
-        .send({ url: 'example.com' })
-        .expect(400);
+      await request(app.getHttpServer()).post('/api/urls').send({ url: 'example.com' }).expect(400);
     });
 
     it('should reject unknown properties (forbidNonWhitelisted) with 400', async () => {
       await request(app.getHttpServer())
-        .post('/api/shorten')
+        .post('/api/urls')
         .send({ url: 'https://example.com', foo: 'bar' })
         .expect(400);
     });
 
     it('should not create a record when validation fails', async () => {
-      await request(app.getHttpServer())
-        .post('/api/shorten')
-        .send({ url: 'not-a-url' })
-        .expect(400);
+      await request(app.getHttpServer()).post('/api/urls').send({ url: 'not-a-url' }).expect(400);
 
       await expect(prisma.url.count()).resolves.toBe(0);
     });

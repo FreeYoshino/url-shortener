@@ -2,7 +2,7 @@ import { Controller, Post, Body } from '@nestjs/common';
 import { CreateUrlDto } from './dto/create-url.dto';
 import { UrlsService } from './urls.service';
 
-@Controller('shorten')
+@Controller('urls')
 export class UrlsController {
   private readonly urlsService: UrlsService;
 

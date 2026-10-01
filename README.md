@@ -16,7 +16,7 @@
 
 ## 核心功能（規劃中）
 
-- **短網址生成** — `POST /api/shorten`：提交長網址，產生唯一短碼並儲存。
+- **短網址生成** — `POST /api/urls`：提交長網址，產生唯一短碼並儲存。
 - **短網址重定向** — `GET /:shortCode`：依短碼查詢並重定向至原始網址。
 - **點擊統計** — `GET /api/urls/:shortCode/stats`：回傳建立時間、原始網址與點擊次數。
 - **請求限流** — 防止 API 被惡意大量請求癱瘓。
@@ -30,13 +30,13 @@
 2. `feature/prisma-database` — **資料庫架構與 Prisma 整合**（✅）
    - Prisma 安裝與初始化、定義 `Url` 模型、建立遷移檔、`PrismaModule` / `PrismaService`
 3. `feature/url-shortening` — **核心功能：短網址生成 API**（✅ 目前進度）
-   - `POST /api/shorten`、URL 輸入驗證、短碼生成演算法、資料庫儲存
+   - `POST /api/urls`、URL 輸入驗證、短碼生成演算法、資料庫儲存
 4. `feature/redirection` — **核心功能：短網址重定向**
    - `GET /:shortCode`、HTTP 301/302 重定向、404 錯誤處理
 5. `feature/analytics` — **進階功能：點擊統計**
    - 點擊計數器 +1、`GET /api/urls/:shortCode/stats`
 6. `feature/rate-limiting` — **安全防護：請求限流**
-   - 整合 `@nestjs/throttler`、限制 `POST /api/shorten` 請求頻率
+   - 整合 `@nestjs/throttler`、限制 `POST /api/urls` 請求頻率
 7. `feature/dockerize-app` — **應用程式容器化**
    - Multi-stage builds 的 Dockerfile、Docker Compose 串聯 App 與 PostgreSQL
 
