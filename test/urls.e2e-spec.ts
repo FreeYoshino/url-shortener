@@ -225,4 +225,23 @@ describe('UrlsController (e2e)', () => {
         .expect(HttpStatus.NOT_FOUND);
     });
   });
+
+  describe('GET /api/urls/:shortCode', () => {
+    it('should return an existing URL record', async () => {
+      const record = await prisma.url.create({
+        data: { originalUrl: 'https://example.com', shortCode: 'shortCode123' },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/urls/${record.shortCode}`)
+        .expect(HttpStatus.OK);
+
+      expect(res.body.originalUrl).toBe(record.originalUrl);
+      expect(res.body.shortCode).toBe(record.shortCode);
+    });
+
+    it('should return 404 when fetching a non-existent short code', async () => {
+      await request(app.getHttpServer()).get('/api/urls/nonexistent').expect(HttpStatus.NOT_FOUND);
+    });
+  });
 });
