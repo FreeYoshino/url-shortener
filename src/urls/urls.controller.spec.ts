@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { ConflictException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { UrlsController } from './urls.controller';
 import { UrlsService } from './urls.service';
 import { CreateUrlDto } from './dto/create-url.dto';
@@ -12,6 +12,7 @@ describe('UrlsController', () => {
   let urlsService: UrlsService;
   const mockUrlsService = {
     create: jest.fn(),
+    delete: jest.fn(),
   };
 
   const dto: CreateUrlDto = { url: 'https://example.com' };
@@ -71,6 +72,34 @@ describe('UrlsController', () => {
       mockUrlsService.create.mockRejectedValue(new ConflictException('conflict'));
 
       await expect(controller.create(dto)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('delete', () => {
+    it('should call urlsService.delete with the given shortCode', async () => {
+      const shortCode = 'shortCode123';
+      mockUrlsService.delete.mockResolvedValue(undefined);
+
+      await controller.delete(shortCode);
+
+      expect(urlsService.delete).toHaveBeenCalledTimes(1);
+      expect(urlsService.delete).toHaveBeenCalledWith(shortCode);
+    });
+
+    it('should return undefined when urlsService.delete resolves successfully', async () => {
+      const shortCode = 'shortCode123';
+      mockUrlsService.delete.mockResolvedValue(undefined);
+
+      const result = await controller.delete(shortCode);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should propagate NotFoundException thrown by urlsService.delete', async () => {
+      const shortCode = 'nonExistentCode';
+      mockUrlsService.delete.mockRejectedValue(new NotFoundException('not found'));
+
+      await expect(controller.delete(shortCode)).rejects.toThrow(NotFoundException);
     });
   });
 });

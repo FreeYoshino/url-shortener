@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Delete, HttpStatus, Param, HttpCode } from '@nestjs/common';
 import { CreateUrlDto } from './dto/create-url.dto';
 import { UrlsService } from './urls.service';
 
@@ -13,5 +13,11 @@ export class UrlsController {
   @Post()
   create(@Body() dto: CreateUrlDto) {
     return this.urlsService.create(dto);
+  }
+
+  @Delete(':shortCode')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(@Param('shortCode') shortCode: string) {
+    await this.urlsService.delete(shortCode);
   }
 }
