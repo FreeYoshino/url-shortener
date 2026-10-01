@@ -20,8 +20,6 @@ model Url {
   updatedAt   DateTime @updatedAt
 
   clicks UrlClick[]
-
-  @@index([shortCode])
 }
 
 model UrlClick {
