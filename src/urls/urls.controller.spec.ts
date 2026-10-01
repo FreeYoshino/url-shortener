@@ -14,6 +14,7 @@ describe('UrlsController', () => {
     create: jest.fn(),
     delete: jest.fn(),
     update: jest.fn(),
+    findByShortCode: jest.fn(),
   };
 
   const dto: CreateUrlDto = { url: 'https://example.com' };
@@ -132,6 +133,34 @@ describe('UrlsController', () => {
       mockUrlsService.update.mockRejectedValue(new NotFoundException('not found'));
 
       await expect(controller.update(shortCode, updateDto)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('get', () => {
+    it('should call urlsService.findByShortCode with the given shortCode', async () => {
+      const shortCode = 'shortCode123';
+      mockUrlsService.findByShortCode.mockResolvedValue(responseDto);
+
+      await controller.get(shortCode);
+
+      expect(urlsService.findByShortCode).toHaveBeenCalledTimes(1);
+      expect(urlsService.findByShortCode).toHaveBeenCalledWith(shortCode);
+    });
+
+    it('should return the service result with no reshape or wrapping', async () => {
+      const shortCode = 'shortCode123';
+      mockUrlsService.findByShortCode.mockResolvedValue(responseDto);
+
+      const result = await controller.get(shortCode);
+
+      expect(result).toEqual(responseDto);
+    });
+
+    it('should propagate NotFoundException thrown by urlsService.findByShortCode', async () => {
+      const shortCode = 'nonExistentCode';
+      mockUrlsService.findByShortCode.mockRejectedValue(new NotFoundException('not found'));
+
+      await expect(controller.get(shortCode)).rejects.toThrow(NotFoundException);
     });
   });
 });
