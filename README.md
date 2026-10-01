@@ -29,9 +29,9 @@
    - NestJS 初始化、Linter & Formatter 設定、Docker 環境配置
 2. `feature/prisma-database` — **資料庫架構與 Prisma 整合**（✅）
    - Prisma 安裝與初始化、定義 `Url` 模型、建立遷移檔、`PrismaModule` / `PrismaService`
-3. `feature/url-shortening` — **核心功能：短網址生成 API**（✅ 目前進度）
+3. `feature/url-shortening` — **核心功能：短網址生成 API**（✅）
    - `POST /api/urls`、URL 輸入驗證、短碼生成演算法、資料庫儲存
-4. `feature/redirection` — **核心功能：短網址重定向**
+4. `feature/redirection` — **核心功能：短網址重定向**（✅）
    - `GET /:shortCode`、HTTP 301/302 重定向、404 錯誤處理
 5. `feature/analytics` — **進階功能：點擊統計**
    - 點擊計數器 +1、`GET /api/urls/:shortCode/stats`
