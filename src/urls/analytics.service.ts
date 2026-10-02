@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StatisticsUrlDto } from './dto/statistics-url.dto';
 
 @Injectable()
 export class AnalyticsService {
@@ -29,5 +30,28 @@ export class AnalyticsService {
 
       this.logger.warn(`Failed to record click for URL ID ${urlId}: ${message}`, stack);
     }
+  }
+
+  async getStatistics(shortCode: string): Promise<StatisticsUrlDto> {
+    const record = await this.prisma.url.findUnique({
+      where: { shortCode },
+      include: {
+        _count: {
+          select: { clicks: true },
+        },
+      },
+    });
+
+    if (!record) {
+      throw new NotFoundException(`Short Code '${shortCode}' not found.`);
+    }
+
+    return {
+      id: record.id,
+      shortCode: record.shortCode,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      accessCount: record._count.clicks,
+    };
   }
 }
