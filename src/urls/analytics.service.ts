@@ -32,6 +32,14 @@ export class AnalyticsService {
     }
   }
 
+  /**
+   * Retrieves click statistics for a shortened URL.
+   *
+   * @param shortCode - The short code of the URL to retrieve statistics for.
+   * @returns A promise that resolves to the URL's metadata and access count.
+   *
+   * @throws {NotFoundException} If the short code does not exist in the database.
+   */
   async getStatistics(shortCode: string): Promise<StatisticsUrlDto> {
     const record = await this.prisma.url.findUnique({
       where: { shortCode },
