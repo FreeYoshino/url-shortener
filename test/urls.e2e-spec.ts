@@ -194,6 +194,52 @@ describe('UrlsController (e2e)', () => {
         .delete('/api/urls/nonexistent')
         .expect(HttpStatus.NOT_FOUND);
     });
+
+    it('should delete associated click records when a URL record is deleted', async () => {
+      const record = await prisma.url.create({
+        data: { originalUrl: 'https://example.com', shortCode: 'shortCode123' },
+      });
+
+      // create some click records associated with the URL record
+      await prisma.urlClick.createMany({
+        data: [{ urlId: record.id }, { urlId: record.id }],
+      });
+
+      // verify the click records exist
+      expect(await prisma.urlClick.count({ where: { urlId: record.id } })).toBe(2);
+
+      await request(app.getHttpServer())
+        .delete(`/api/urls/${record.shortCode}`)
+        .expect(HttpStatus.NO_CONTENT);
+
+      expect(await prisma.urlClick.count({ where: { urlId: record.id } })).toBe(0);
+    });
+
+    it('should not delete click records associated with other URL records', async () => {
+      const record1 = await prisma.url.create({
+        data: { originalUrl: 'https://example1.com', shortCode: 'shortCode1' },
+      });
+      const record2 = await prisma.url.create({
+        data: { originalUrl: 'https://example2.com', shortCode: 'shortCode2' },
+      });
+
+      // create click records for both URL records
+      await prisma.urlClick.createMany({
+        data: [{ urlId: record1.id }, { urlId: record2.id }],
+      });
+
+      // verify the click records exist
+      expect(await prisma.urlClick.count({ where: { urlId: record1.id } })).toBe(1);
+      expect(await prisma.urlClick.count({ where: { urlId: record2.id } })).toBe(1);
+
+      await request(app.getHttpServer())
+        .delete(`/api/urls/${record1.shortCode}`)
+        .expect(HttpStatus.NO_CONTENT);
+
+      // verify that only the click records associated with the deleted URL record are deleted
+      expect(await prisma.urlClick.count({ where: { urlId: record1.id } })).toBe(0);
+      expect(await prisma.urlClick.count({ where: { urlId: record2.id } })).toBe(1);
+    });
   });
 
   describe('PUT /api/urls/:shortCode', () => {
