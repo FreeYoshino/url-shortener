@@ -104,23 +104,33 @@ export class UrlsService {
   }
 
   /**
+   * Requires a URL record by its short code, throwing a NotFoundException if not found.
+   *
+   * @param shortCode The short code to search for.
+   * @returns The found URL record.
+   *
+   * @throws {NotFoundException} If the short code does not exist in the database.
+   */
+  async requireUrlRecord(shortCode: string): Promise<Url> {
+    const record = await this.prisma.url.findUnique({
+      where: { shortCode },
+    });
+
+    if (!record) {
+      throw new NotFoundException(`Short Code '${shortCode}' not found.`);
+    }
+
+    return record;
+  }
+
+  /**
    * Finds a URL by its short code.
    *
    * @param shortCode The short code to search for.
    * @returns A promise resolving to the found URL or rejecting with a NotFoundException if not found.
-   *
-   * @throws {NotFoundException} If the short code does not exist in the database.
    */
   async findByShortCode(shortCode: string): Promise<ResponseUrlDto> {
-    const urlRecord = await this.prisma.url.findUnique({
-      where: { shortCode },
-    });
-
-    if (!urlRecord) {
-      throw new NotFoundException(`Short Code '${shortCode}' not found.`);
-    }
-
-    return this.toResponseDto(urlRecord);
+    return this.toResponseDto(await this.requireUrlRecord(shortCode));
   }
 
   /**
