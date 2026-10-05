@@ -290,4 +290,53 @@ describe('UrlsController (e2e)', () => {
       await request(app.getHttpServer()).get('/api/urls/nonexistent').expect(HttpStatus.NOT_FOUND);
     });
   });
+
+  describe('GET /api/urls/:shortCode/statistics', () => {
+    it('should return statistics for an existing URL record(Not clicked)', async () => {
+      const record = await prisma.url.create({
+        data: { originalUrl: 'https://example.com', shortCode: 'shortCode123' },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/urls/${record.shortCode}/statistics`)
+        .expect(HttpStatus.OK);
+
+      expect(res.body).toEqual({
+        id: record.id,
+        shortCode: record.shortCode,
+        createdAt: record.createdAt.toISOString(),
+        updatedAt: record.updatedAt.toISOString(),
+        accessCount: 0,
+      });
+    });
+
+    it('should return statistics for an existing URL record(Clicked N times)', async () => {
+      const record = await prisma.url.create({
+        data: { originalUrl: 'https://example.com', shortCode: 'shortCode123' },
+      });
+
+      // create some click records associated with the URL record
+      await prisma.urlClick.createMany({
+        data: [{ urlId: record.id }, { urlId: record.id }, { urlId: record.id }],
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/urls/${record.shortCode}/statistics`)
+        .expect(HttpStatus.OK);
+
+      expect(res.body).toEqual({
+        id: record.id,
+        shortCode: record.shortCode,
+        createdAt: record.createdAt.toISOString(),
+        updatedAt: record.updatedAt.toISOString(),
+        accessCount: 3,
+      });
+    });
+
+    it('should return 404 when fetching statistics for a non-existent short code', async () => {
+      await request(app.getHttpServer())
+        .get('/api/urls/nonexistent/statistics')
+        .expect(HttpStatus.NOT_FOUND);
+    });
+  });
 });
