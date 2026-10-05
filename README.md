@@ -34,7 +34,7 @@
 4. `feature/redirection` — **核心功能：短網址重定向**（✅）
    - `GET /:shortCode`、HTTP 301/302 重定向、404 錯誤處理
 5. `feature/analytics` — **進階功能：點擊統計** （✅）
-   - 點擊計數器 +1、`GET /api/urls/:shortCode/stats`
+   - 點擊計數器 +1、`GET /api/urls/:shortCode/statistics`
 6. `feature/rate-limiting` — **安全防護：請求限流**
    - 整合 `@nestjs/throttler`、限制 `POST /api/urls` 請求頻率
 7. `feature/dockerize-app` — **應用程式容器化**
