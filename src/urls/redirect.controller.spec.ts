@@ -1,8 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RedirectController } from './redirect.controller';
 import { UrlsService } from './urls.service';
-import { CreateUrlDto } from './dto/create-url.dto';
-import { ResponseUrlDto } from './dto/response-url.dto';
+import { AnalyticsService } from './analytics.service';
 import { NotFoundException, HttpStatus } from '@nestjs/common';
 
 describe('RedirectController', () => {
@@ -11,18 +10,22 @@ describe('RedirectController', () => {
   // mock UrlsService to avoid actual database calls during testing
   let urlsService: UrlsService;
   const mockUrlsService = {
-    findByShortCode: jest.fn(),
+    requireUrlRecord: jest.fn(),
+  };
+
+  // mock AnalyticsService to avoid actual database calls during testing
+  let analyticsService: AnalyticsService;
+  const mockAnalyticsService = {
+    recordClick: jest.fn(),
   };
 
   const shortCode = 'shortCode123';
-  const dto: CreateUrlDto = { url: 'https://example.com' };
-  const createdAt = new Date('2026-01-01T00:00:00.000Z');
-  const updatedAt = new Date('2026-01-01T00:00:00.000Z');
-  const responseDto: ResponseUrlDto = {
-    originalUrl: dto.url,
-    shortCode: 'abc123',
-    createdAt,
-    updatedAt,
+  const mockUrlRecord = {
+    id: 'urlId123',
+    originalUrl: 'https://example.com',
+    shortCode: 'shortCode123',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
   };
 
   beforeEach(async () => {
@@ -33,11 +36,18 @@ describe('RedirectController', () => {
           provide: UrlsService,
           useValue: mockUrlsService,
         },
+        {
+          provide: AnalyticsService,
+          useValue: mockAnalyticsService,
+        },
       ],
     }).compile();
 
     controller = module.get<RedirectController>(RedirectController);
     urlsService = module.get<UrlsService>(UrlsService);
+    analyticsService = module.get<AnalyticsService>(AnalyticsService);
+
+    jest.clearAllMocks(); // Clear mock calls before each test
   });
 
   it('should be defined', () => {
@@ -45,27 +55,38 @@ describe('RedirectController', () => {
   });
 
   describe('redirect', () => {
-    it('should call urlsService.findByShortCode with the given shortCode', async () => {
-      mockUrlsService.findByShortCode.mockResolvedValue(responseDto);
+    it('should call urlsService.requireUrlRecord with the given shortCode', async () => {
+      mockUrlsService.requireUrlRecord.mockResolvedValue(mockUrlRecord);
       await controller.redirect(shortCode);
 
-      expect(urlsService.findByShortCode).toHaveBeenCalledTimes(1);
-      expect(urlsService.findByShortCode).toHaveBeenCalledWith(shortCode);
+      expect(urlsService.requireUrlRecord).toHaveBeenCalledTimes(1);
+      expect(urlsService.requireUrlRecord).toHaveBeenCalledWith(shortCode);
     });
 
     it('should return redirect object with original URL and HttpStatus.FOUND status code', async () => {
-      mockUrlsService.findByShortCode.mockResolvedValue(responseDto);
+      mockUrlsService.requireUrlRecord.mockResolvedValue(mockUrlRecord);
       const result = await controller.redirect(shortCode);
 
       expect(result).toEqual({
-        url: responseDto.originalUrl,
+        url: mockUrlRecord.originalUrl,
         statusCode: HttpStatus.FOUND,
       });
     });
 
-    it('should propagate NotFoundException thrown by urlsService.findByShortCode', async () => {
-      mockUrlsService.findByShortCode.mockRejectedValue(new NotFoundException());
+    it('should trigger analyticsService.recordClick with url id asynchronously', async () => {
+      mockUrlsService.requireUrlRecord.mockResolvedValue(mockUrlRecord);
+
+      await controller.redirect(shortCode);
+
+      expect(analyticsService.recordClick).toHaveBeenCalledTimes(1);
+      expect(analyticsService.recordClick).toHaveBeenCalledWith(mockUrlRecord.id);
+    });
+
+    it('should propagate NotFoundException thrown by urlsService.requireUrlRecord', async () => {
+      mockUrlsService.requireUrlRecord.mockRejectedValue(new NotFoundException());
       await expect(controller.redirect(shortCode)).rejects.toThrow(NotFoundException);
+
+      expect(urlsService.requireUrlRecord).toHaveBeenCalled();
     });
   });
 });
