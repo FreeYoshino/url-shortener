@@ -1,6 +1,8 @@
 import { Controller, Get, HttpStatus, Param, Redirect } from '@nestjs/common';
 import { UrlsService } from './urls.service';
 import { AnalyticsService } from './analytics.service';
+import { Throttle } from '@nestjs/throttler';
+import { THROTTLER_LIMITS } from '../throttler/throttler-limits';
 
 @Controller('')
 export class RedirectController {
@@ -13,6 +15,7 @@ export class RedirectController {
   }
 
   @Get(':shortCode')
+  @Throttle({ default: { limit: THROTTLER_LIMITS.REDIRECT_LIMIT } })
   @Redirect()
   async redirect(@Param('shortCode') shortCode: string) {
     const urlRecord = await this.urlsService.requireUrlRecord(shortCode);
