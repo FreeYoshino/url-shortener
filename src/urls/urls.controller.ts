@@ -14,6 +14,7 @@ import { UpdateUrlDto } from './dto/update-url.dto';
 import { UrlsService } from './urls.service';
 import { AnalyticsService } from './analytics.service';
 import { Throttle } from '@nestjs/throttler';
+import { THROTTLER_LIMITS } from '../throttler/throttler-limits';
 
 @Controller('urls')
 export class UrlsController {
@@ -26,7 +27,7 @@ export class UrlsController {
   }
 
   @Post()
-  @Throttle({ default: { limit: 10 } })
+  @Throttle({ default: { limit: THROTTLER_LIMITS.WRITE_LIMIT } })
   create(@Body() dto: CreateUrlDto) {
     return this.urlsService.create(dto);
   }
