@@ -1,6 +1,6 @@
 # url-shortener — 短網址服務
 
-一個基於 **NestJS** 建構的 URL Shortening Service（短網址服務），靈感來自 [roadmap.sh](https://roadmap.sh) 的 URL Shortening Service 專案。提供長網址縮短、短碼重定向與點擊統計等功能。
+一個基於 **NestJS** 建構的 URL Shortening Service（短網址服務），靈感來自 [roadmap.sh](https://roadmap.sh) 的 URL Shortening Service 專案。提供長網址縮短、短碼重定向、點擊統計與請求限流等功能。
 
 ## 技術棧
 
@@ -14,12 +14,44 @@
 | 靜態檢查 / 格式化 | oxlint + Prettier                |
 | 測試              | Jest + Supertest                 |
 
-## 核心功能（規劃中）
+## 核心功能
 
-- **短網址生成** — `POST /api/urls`：提交長網址，產生唯一短碼並儲存。
-- **短網址重定向** — `GET /:shortCode`：依短碼查詢並重定向至原始網址。
-- **點擊統計** — `GET /api/urls/:shortCode/stats`：回傳建立時間、原始網址與點擊次數。
-- **請求限流** — 防止 API 被惡意大量請求癱瘓。
+- **短網址生成** — `POST /api/urls`：提交長網址，產生唯一短碼並儲存（同一網址重複提交會回同一短碼）。
+- **短網址重定向** — `GET /:shortCode`：依短碼查詢並以 `302` 重定向至原始網址，查無短碼回 `404`。
+- **點擊統計** — `GET /api/urls/:shortCode/statistics`：回傳該短網址的建立／更新時間與累計點擊次數。
+- **請求限流** — 依來源 IP 限制各端點頻率，超額回 `429`（詳見下一節）。
+
+## 請求限流
+
+以 [`@nestjs/throttler`](https://github.com/nestjs/throttler) 實作。`ThrottlerGuard` 以全域 Guard 註冊，因此**之後新增的端點會自動受保護**；追蹤鍵為來源 IP，計數存放於**行程記憶體**。
+
+| 端點                      | 預設額度        | 額度來源                                         |
+| :------------------------ | :-------------- | :----------------------------------------------- |
+| `POST /api/urls`          | 10 次 / 分 / IP | `THROTTLE_WRITE_LIMIT`（由 `@Throttle` 覆寫）    |
+| `GET /:shortCode`         | 60 次 / 分 / IP | `THROTTLE_REDIRECT_LIMIT`（由 `@Throttle` 覆寫） |
+| 其餘端點（含 `GET /api`） | 30 次 / 分 / IP | `THROTTLE_LIMIT`（模組層級的預設值）             |
+
+計數是**逐路由**的：key 由 controller 與 handler 名稱組成，所以同一組 IP 打 `POST /api/urls` 與 `GET /api/urls/:shortCode` 各自獨立計數，不會互相消耗額度。視窗長度由 `THROTTLE_TTL_MS`（毫秒）決定，預設 60000。
+
+未被擋下的回應會帶上額度標頭；被擋下時則只帶 `Retry-After`：
+
+| 標頭                    | 出現時機       | 說明                 |
+| :---------------------- | :------------- | :------------------- |
+| `X-RateLimit-Limit`     | 未被擋下的回應 | 該路由的額度上限     |
+| `X-RateLimit-Remaining` | 未被擋下的回應 | 本視窗剩餘次數       |
+| `X-RateLimit-Reset`     | 未被擋下的回應 | 視窗剩餘秒數         |
+| `Retry-After`           | `429` 時       | 解除封鎖前的剩餘秒數 |
+
+超過額度時回 `429 Too Many Requests`：
+
+```json
+{
+  "statusCode": 429,
+  "message": "Too many requests, please try again later."
+}
+```
+
+這一層的界線是**擋單一來源的濫用**（例如腳本灌爆資料庫）。
 
 ## 開發 Roadmap
 
@@ -34,9 +66,9 @@
 4. `feature/redirection` — **核心功能：短網址重定向**（✅）
    - `GET /:shortCode`、HTTP 301/302 重定向、404 錯誤處理
 5. `feature/analytics` — **進階功能：點擊統計** （✅）
-   - 點擊計數器 +1、`GET /api/urls/:shortCode/statistics`
-6. `feature/rate-limiting` — **安全防護：請求限流**
-   - 整合 `@nestjs/throttler`、限制 `POST /api/urls` 請求頻率
+   - 重定向時記錄點擊事件、`GET /api/urls/:shortCode/statistics`
+6. `feature/rate-limiting` — **安全防護：請求限流**（✅）
+   - 整合 `@nestjs/throttler`、全域 `ThrottlerGuard`、逐路由額度並由環境變數驅動
 7. `feature/dockerize-app` — **應用程式容器化**
    - Multi-stage builds 的 Dockerfile、Docker Compose 串聯 App 與 PostgreSQL
 
@@ -62,12 +94,29 @@ npm install
 cp .env.example .env
 ```
 
-`.env` 中有兩組設定，**必須指向同一個資料庫**：
+`.env` 的設定分成三組。
+
+**1. 資料庫**（兩者必須指向同一個資料庫）
 
 - `DB_USERNAME` / `DB_PASSWORD` / `DB_DATABASE` / `DB_PORT` — 由 `docker-compose.yml` 讀取，用來建立容器內的資料庫。
 - `DATABASE_URL` — 由應用程式與 Prisma CLI 讀取，用來連線。
 
 > **注意**：Postgres 只在資料卷**第一次建立時**套用 `POSTGRES_*` 環境變數。之後修改 `.env` 的這些值不會生效，需先 `docker compose down -v` 刪除資料卷重建（**既有資料會一併清除**）。
+
+**2. 伺服器**
+
+- `PORT` — 服務監聽的連接埠（預設 `3000`）。
+
+**3. 請求限流**（詳見「請求限流」一節）
+
+| 變數                      | 說明                     | 預設值  |
+| :------------------------ | :----------------------- | :------ |
+| `THROTTLE_TTL_MS`         | 計數視窗長度（毫秒）     | `60000` |
+| `THROTTLE_LIMIT`          | 未被個別覆寫的端點之額度 | `30`    |
+| `THROTTLE_WRITE_LIMIT`    | `POST /api/urls` 的額度  | `10`    |
+| `THROTTLE_REDIRECT_LIMIT` | `GET /:shortCode` 的額度 | `60`    |
+
+四個變數皆為選填，未設定時採用上表預設值。額度是在**每個請求**當下讀取環境變數後才解析，因此調整這些值只需重啟服務，不需要重新建置。
 
 ### 3. 啟動資料庫（Docker）
 
