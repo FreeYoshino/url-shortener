@@ -10,7 +10,7 @@ RUN npm ci
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 
-COPY tsconfig*.json nest-cli.json ./
+COPY tsconfig*.json nest-cli.json jest.config.ts ./
 
 # Use fake DATABASE_URL to avoid errors during Prisma generation
 ARG DATABASE_URL=postgresql://build:build@localhost:5432/build
