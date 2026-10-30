@@ -172,3 +172,61 @@ jobs:
 
       - name: Build project
         run: npm run build
+
+  docker:
+    name: Docker
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: url_shortener
+          POSTGRES_PASSWORD: url_shortener
+          POSTGRES_DB: url_shortener
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U url_shortener"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://url_shortener:url_shortener@localhost:5432/url_shortener?schema=public
+    steps:
+      # Pull the code from the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Validate the three compose files (syntax, profiles and variable interpolation)
+      - name: Validate compose files
+        run: |
+          docker compose --env-file .env.example config -q
+          docker compose --env-file .env.production.example -f docker-compose.prod.yml config -q
+          docker compose -f docker-compose.test.yml config -q
+
+      # Build the image that docker-compose.prod.yml ships
+      - name: Build production image
+        run: docker build --target prod -t url-shortener:ci .
+
+      # The prod compose applies migrations with the `base` target, so exercise that path too
+      - name: Build migrate image and apply migrations
+        run: |
+          docker build --target base -t url-shortener:migrate .
+          docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            url-shortener:migrate npx prisma migrate deploy
+
+      # Start the packaged image and make a request that hits the database
+      - name: Smoke test production image
+        run: |
+          docker run -d --name app --network host \
+            -e DATABASE_URL="$DATABASE_URL" -e PORT=3000 \
+            url-shortener:ci
+          trap 'docker logs app || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/api > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS -X POST http://localhost:3000/api/urls \
+            -H 'Content-Type: application/json' \
+            -d '{"url":"https://example.com"}'
