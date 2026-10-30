@@ -65,28 +65,48 @@
    - `POST /api/urls`、URL 輸入驗證、短碼生成演算法、資料庫儲存
 4. `feature/redirection` — **核心功能：短網址重定向**（✅）
    - `GET /:shortCode`、HTTP 301/302 重定向、404 錯誤處理
-5. `feature/analytics` — **進階功能：點擊統計** （✅）
+5. `feature/analytics` — **進階功能：點擊統計**（✅）
    - 重定向時記錄點擊事件、`GET /api/urls/:shortCode/statistics`
 6. `feature/rate-limiting` — **安全防護：請求限流**（✅）
    - 整合 `@nestjs/throttler`、全域 `ThrottlerGuard`、逐路由額度並由環境變數驅動
-7. `feature/dockerize-app` — **應用程式容器化**
-   - Multi-stage builds 的 Dockerfile、Docker Compose 串聯 App 與 PostgreSQL
+7. `feature/dockerize-app` — **應用程式容器化**（✅）
+   - Multi-stage Dockerfile（`dev` / `test` / `builder` / `prod`）
+   - 三份 Compose：開發（hot reload）、一鍵測試（tmpfs Postgres）、正式環境（healthcheck + 顯式遷移）
+   - 修正 Docker Desktop 下 bind mount 收不到檔案事件造成的 hot reload 失效
 
 ## 專案結構
 
-```
-完成後待補
+```text
+url-shortener/
+├── prisma/
+│   ├── migrations/              # 遷移檔（依時間命名）
+│   └── schema.prisma
+├── src/
+│   ├── generated/prisma/        # Prisma Client（gitignore，需執行 generate）
+│   ├── prisma/                  # PrismaModule / PrismaService
+│   ├── throttler/               # 全域限流模組與額度解析
+│   ├── urls/
+│   │   ├── dto/                 # 請求與回應 DTO
+│   │   ├── urls.controller.ts   # POST /api/urls、GET /api/urls/:shortCode/statistics
+│   │   ├── redirect.controller.ts # GET /:shortCode
+│   │   ├── urls.service.ts      # 建立短網址、查詢
+│   │   └── analytics.service.ts # 點擊紀錄與統計
+│   ├── app.module.ts
+│   ├── main.ts
+│   └── setup-app.ts             # 全域 pipe、路由前綴
+├── test/                        # E2E 測試（需真實資料庫）
+├── Dockerfile                   # Multi-stage：dev / test / builder / prod
+├── docker-compose.yml           # 開發：db + app（bind mount + hot reload）
+├── docker-compose.test.yml      # 測試：tmpfs Postgres + 單元 + E2E
+├── docker-compose.prod.yml      # 正式：prod 映像 + 顯式 migrate 服務
+└── ...
 ```
 
 ## 開始使用
 
-### 1. 安裝依賴
+方式一、三、四只需要 Docker（Compose v2）；方式二另需 Node.js 24 與 npm。
 
-```bash
-npm install
-```
-
-### 2. 設定環境變數
+### 1. 設定環境變數
 
 複製範本，再依需求調整：
 
@@ -98,14 +118,14 @@ cp .env.example .env
 
 **1. 資料庫**（兩者必須指向同一個資料庫）
 
-- `DB_USERNAME` / `DB_PASSWORD` / `DB_DATABASE` / `DB_PORT` — 由 `docker-compose.yml` 讀取，用來建立容器內的資料庫。
-- `DATABASE_URL` — 由應用程式與 Prisma CLI 讀取，用來連線。
+- `DB_USERNAME` / `DB_PASSWORD` / `DB_DATABASE` / `DB_PORT` — 由 `docker-compose.yml` 讀取，用來建立容器內的資料庫；`DB_PORT` 是映射到本機的埠（只綁定 `127.0.0.1`）。
+- `DATABASE_URL` — 由應用程式與 Prisma CLI 讀取，用來連線。**在宿主機執行時** host 填 `localhost`；在容器內執行時由 compose 覆寫成服務名 `db`，因此不需修改 `.env`。
 
 > **注意**：Postgres 只在資料卷**第一次建立時**套用 `POSTGRES_*` 環境變數。之後修改 `.env` 的這些值不會生效，需先 `docker compose down -v` 刪除資料卷重建（**既有資料會一併清除**）。
 
 **2. 伺服器**
 
-- `PORT` — 服務監聽的連接埠（預設 `3000`）。
+- `PORT` — 開發環境對外映射的連接埠（預設 `3000`）；容器內的應用程式固定監聽 `3000`。
 
 **3. 請求限流**（詳見「請求限流」一節）
 
@@ -118,89 +138,116 @@ cp .env.example .env
 
 四個變數皆為選填，未設定時採用上表預設值。額度是在**每個請求**當下讀取環境變數後才解析，因此調整這些值只需重啟服務，不需要重新建置。
 
-### 3. 啟動資料庫（Docker）
+**正式環境**使用另一份 `.env.production`（從 `.env.production.example` 複製），只需填 `DB_*`、`APP_PORT` 與限流參數；`DATABASE_URL` 由 `docker-compose.prod.yml` 以 `db` 為 host 組出，避免兩處設定不同步。Compose **不會自動載入** `.env.production`，所有指令都要帶 `--env-file`（見「方式四」）。
+
+### 2. 方式一：全容器開發（推薦）
+
+只需要 Docker：資料庫與應用程式都在容器內，`src/`、`test/`、`prisma/` 以 bind mount 掛入，存檔即觸發 hot reload。
 
 ```bash
-# 啟動 PostgreSQL（背景執行）
-docker compose up -d
+# 首次啟動：建置映像並啟動 db + app
+docker compose up --build
 
-# 確認容器狀態為 Up
-docker compose ps
-
-# 需要時查看資料庫日誌
-docker compose logs -f postgres
+# 另開一個終端，套用遷移
+docker compose exec app npx prisma migrate deploy
 ```
 
-### 4. 初始化 Prisma
+服務位址：`http://localhost:3000/api`。
 
-Prisma 產生的 Client 位於 `src/generated/prisma`，該路徑列在 `.gitignore` 中，因此 clone 下來並不存在；。所以**首次取得專案、或 `schema.prisma` 有異動後**，都需手動執行：
+- 修改 `schema.prisma` 後產生遷移（遷移檔會寫回宿主機的 `prisma/`，並觸發容器內的 `prisma generate`）：
+  ```bash
+  docker compose exec app npx prisma migrate dev --name <名稱>
+  ```
+- 查看日誌：`docker compose logs -f app` 或 `docker compose logs -f db`
+- 進入 psql：`docker compose exec db psql -U <DB_USERNAME> -d <DB_DATABASE>`
+- 停止：`docker compose down`（保留資料卷）；`docker compose down -v`（**連資料一起刪除**）
+
+### 3. 方式二：本機 Node + 容器化資料庫
+
+需要在宿主機上執行程式（除錯、IDE 整合）時使用。資料庫仍由 compose 提供，只啟動 `db`：
 
 ```bash
-# 依 schema 產生 Prisma Client（不需連線資料庫）
-npx prisma generate
+cp .env.example .env            # 首次；compose 也要讀這份做插值
+npm install
+docker compose up -d db
 
-# 套用 prisma/migrations 中尚未執行的遷移
-npx prisma migrate deploy
-
-# 確認狀態，應顯示 Database schema is up to date!
-npx prisma migrate status
+npx prisma generate             # 產生 src/generated/prisma
+npx prisma migrate deploy       # 套用 prisma/migrations
+npm run start:dev
 ```
+
+`.env` 的 `DATABASE_URL` 指向 `localhost:5432`，對應容器映射出來的埠；若改了 `DB_PORT`，連線字串裡的埠號也要同步。
 
 > 服務啟動時**不會**自動執行遷移 —— `PrismaService` 只負責建立連線。忘記 `migrate deploy` 會在查詢時得到「資料表不存在」的錯誤。
 
-### 5. 啟動服務
+### 4. 方式三：一鍵執行測試
 
 ```bash
-# 開發模式（Watch 模式）
-npm run start:dev
-
-# 建立正式環境的 build 並執行
-npm run build
-npm run start:prod
+docker compose -f docker-compose.test.yml run --rm --build test
 ```
 
-### 其他常用指令
+在 test 映像內依序執行 `prisma migrate deploy` → 單元測試 → E2E 測試。資料庫使用 **tmpfs**（只存在記憶體），容器刪除後資料即消失，不會影響開發資料。`run` 會把容器的 exit code 傳回宿主機，可直接用於 CI。
+
+`run --rm` 只會移除測試容器本身，`db` 容器會留在背景；測試結束後清理：
 
 ```bash
-npm run lint          # 執行靜態檢查（oxlint）
+docker compose -f docker-compose.test.yml down
+```
+
+### 5. 方式四：正式環境
+
+```bash
+cp .env.production.example .env.production    # 填入 DB_PASSWORD 等實際值
+
+# 1) 先套用遷移
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm migrate
+
+# 2) 再啟動應用程式
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+```
+
+- `migrate` 屬於 `tools` profile，平常的 `up` 不會執行它 —— **順序不能顛倒**，否則 app 會連上一個沒有資料表的資料庫。
+- app 服務設有 healthcheck，`docker compose --env-file .env.production -f docker-compose.prod.yml ps` 應顯示 `healthy`。但它只確認 HTTP 服務已啟動（`GET /api` 不查資料庫），若漏跑遷移，`healthy` 照樣出現，實際打 API 才會回 `500`。
+- 停止：把 `up -d --build` 換成 `down`（預設保留 `postgres_prod_data` 資料卷）。
+
+### 6. 容器開發注意事項
+
+**容器內的 Prisma Client 要手動更新**
+
+`/app/src/generated` 掛載匿名 volume，避免宿主機的空目錄蓋掉映像內已生成的 Client。代價是在宿主機執行 `npx prisma migrate dev` 後，容器內仍是舊版 Client：
+
+```bash
+docker compose exec app npx prisma generate
+```
+
+若遷移本身就是在容器內執行（`docker compose exec app npx prisma migrate dev`），這步會自動完成，不需額外處理。
+
+反過來也成立：在容器內產生的 Client 不會回寫到宿主機，`src/generated` 仍是舊版。之後若改用方式二在宿主機執行程式，先跑一次 `npx prisma generate`。
+
+**匿名 volume 不會隨重建刷新**
+
+`docker compose up --build` 或 `restart` 都不會重新初始化 `/app/node_modules` 與 `/app/src/generated`。要重建這兩個目錄：
+
+```bash
+docker compose up --build --renew-anon-volumes
+```
+
+這不會影響 `postgres_data`；若連資料庫資料也要清掉才用 `down -v`。
+
+**Windows / macOS 的檔案變更偵測**
+
+Docker Desktop 的 bind mount 不會把宿主機的檔案事件轉發進容器，Nest 預設的 tsc watch 因此收不到變更。`docker-compose.yml` 已設定 `TSC_WATCHFILE` 與 `TSC_WATCHDIRECTORY` 改用輪詢。Linux 上事件轉發正常，可移除這兩行以降低 CPU 用量。
+
+### 7. 其他常用指令
+
+```bash
+npm run lint          # 靜態檢查（oxlint）
+npm run typecheck     # 型別檢查
 npm run format        # 格式化程式碼（Prettier）
-npm run test          # 執行單元測試（Jest）
-npm run test:e2e      # 執行端對端測試
+npm run test          # 單元測試（Jest）
+npm run test:e2e      # 端對端測試（需可連線的資料庫）
+npm run build         # 編譯至 dist/
 ```
-
-## 指令速查
-
-### Docker
-
-| 指令                              | 說明                             |
-| --------------------------------- | -------------------------------- |
-| `docker compose up -d`            | 啟動 PostgreSQL（背景執行）      |
-| `docker compose ps`               | 查看容器狀態與連接埠對應         |
-| `docker compose logs -f postgres` | 持續輸出資料庫日誌               |
-| `docker compose stop`             | 停止容器，保留容器與資料卷       |
-| `docker compose down`             | 移除容器與網路，**保留**資料卷   |
-| `docker compose down -v`          | 移除容器**與資料卷**（資料全毀） |
-
-進入 psql 互動介面（容器名取自 `container_name`，帳號與庫名請依 `.env` 調整）：
-
-```bash
-docker exec -it url_shortener_postgres psql -U user -d url_shortener
-```
-
-### Prisma
-
-Prisma CLI 透過 `prisma.config.ts` 載入 `.env`，因此不需額外指定連線字串。
-
-| 指令                                   | 說明                                                            |
-| -------------------------------------- | --------------------------------------------------------------- |
-| `npx prisma generate`                  | 依 schema 產生 Prisma Client 至 `src/generated/prisma`          |
-| `npx prisma migrate dev --name <名稱>` | 比對 schema 與資料庫，產生並套用遷移（開發用，會一併 generate） |
-| `npx prisma migrate deploy`            | 套用既有遷移檔（CI / 正式環境用，**不會** generate）            |
-| `npx prisma migrate status`            | 檢查是否有未套用的遷移                                          |
-| `npx prisma migrate dev --create-only` | 只產生遷移檔、不套用，適合手寫 SQL                              |
-| `npx prisma migrate reset`             | 清空資料庫並重新套用所有遷移（**資料全毀**）                    |
-| `npx prisma studio`                    | 開啟瀏覽器 GUI 檢視與編輯資料                                   |
-| `npx prisma format`                    | 格式化 `schema.prisma`                                          |
 
 ## License
 
