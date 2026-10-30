@@ -1,0 +1,29 @@
+name: url-shortener-test
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: url_shortener_test
+      POSTGRES_PASSWORD: url_shortener_test
+      POSTGRES_DB: url_shortener_test
+    # Use a tmpfs volume to avoid writing to disk, which is slower and can cause issues with tests that expect a clean database state.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U url_shortener_test -d url_shortener_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test:
+    build:
+      context: .
+      target: test
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://url_shortener_test:url_shortener_test@db:5432/url_shortener_test?schema=public
+    command: sh -c "npx prisma migrate deploy && npm run test && npm run test:e2e"
+    depends_on:
+      db:
+        condition: service_healthy

@@ -1,16 +1,57 @@
+name: url-shortener-dev
+
 services:
-  postgres:
+  db:
     image: postgres:16-alpine
     container_name: url_shortener_postgres
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: '${DB_USERNAME}'
-      POSTGRES_PASSWORD: '${DB_PASSWORD}'
-      POSTGRES_DB: '${DB_DATABASE}'
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
     ports:
-      - '${DB_PORT}:5432'
+      # loop back to localhost to avoid exposing the database to the network
+      - '127.0.0.1:${DB_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      target: dev
+    init: true
+    stdin_open: true
+    tty: true
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD}@db:5432/${DB_DATABASE}?schema=public
+      THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-30}
+      THROTTLE_WRITE_LIMIT: ${THROTTLE_WRITE_LIMIT:-10}
+      THROTTLE_REDIRECT_LIMIT: ${THROTTLE_REDIRECT_LIMIT:-60}
+      # Docker Desktop on Windows does not forward inotify events from bind
+      # mounts, so tsc's default fs-event watcher never fires. Poll instead.
+      TSC_WATCHFILE: DynamicPriorityPolling
+      TSC_WATCHDIRECTORY: RecursiveDirectoryUsingDynamicPriorityPolling
+    ports:
+      - '${PORT:-3000}:3000'
+    volumes:
+      # Hot reload
+      - ./src:/app/src
+      - ./test:/app/test
+      - ./prisma:/app/prisma
+      # Anonymous volume to avoid overwriting container files with empty files
+      - /app/node_modules
+      - /app/src/generated
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -1,0 +1,67 @@
+name: url-shortener-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # migrate container is used to run Prisma migrations before starting the app. It is a separate service to ensure that migrations are applied before the app starts.
+  migrate:
+    build:
+      context: .
+      target: base
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD:?DB_PASSWORD is required}@db:5432/${DB_DATABASE}?schema=public
+    profiles: ['tools']
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    build:
+      context: .
+      target: prod
+    image: url-shortener:prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USERNAME}:${DB_PASSWORD:?DB_PASSWORD is required}@db:5432/${DB_DATABASE}?schema=public
+      THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-30}
+      THROTTLE_WRITE_LIMIT: ${THROTTLE_WRITE_LIMIT:-10}
+      THROTTLE_REDIRECT_LIMIT: ${THROTTLE_REDIRECT_LIMIT:-60}
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/api').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 10s
+
+volumes:
+  postgres_prod_data:
