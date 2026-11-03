@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUrlDto } from './dto/create-url.dto';
 import { ResponseUrlDto } from './dto/response-url.dto';
 import { UpdateUrlDto } from './dto/update-url.dto';
+import { UrlCacheService } from './url-cache.service';
 
 /**
  * Service responsible for managing URL shortening operations.
@@ -24,8 +25,11 @@ export class UrlsService {
   /** Maximum number of retries for generating a unique short code. */
   static MAX_RETRIES = 5;
 
-  constructor(prisma: PrismaService) {
+  private readonly urlCacheService: UrlCacheService;
+
+  constructor(prisma: PrismaService, urlCacheService: UrlCacheService) {
     this.prisma = prisma;
+    this.urlCacheService = urlCacheService;
   }
 
   /**
@@ -51,7 +55,10 @@ export class UrlsService {
     const existingUrl = await this.prisma.url.findUnique({
       where: { originalUrl },
     });
-    if (existingUrl) return this.toResponseDto(existingUrl);
+    if (existingUrl) {
+      await this.urlCacheService.set(existingUrl);
+      return this.toResponseDto(existingUrl);
+    }
 
     // Generate a unique short code
     for (let attempt = 0; attempt < UrlsService.MAX_RETRIES; attempt++) {
@@ -61,6 +68,8 @@ export class UrlsService {
         const newUrl = await this.prisma.url.create({
           data: { originalUrl, shortCode },
         });
+
+        await this.urlCacheService.set(newUrl);
         return this.toResponseDto(newUrl);
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -75,7 +84,10 @@ export class UrlsService {
           const record = await this.prisma.url.findUnique({
             where: { originalUrl },
           });
-          if (record) return this.toResponseDto(record);
+          if (record) {
+            await this.urlCacheService.set(record);
+            return this.toResponseDto(record);
+          }
 
           continue; // Short code already exists, try again
         }
@@ -112,14 +124,17 @@ export class UrlsService {
    * @throws {NotFoundException} If the short code does not exist in the database.
    */
   async requireUrlRecord(shortCode: string): Promise<Url> {
+    const cached = await this.urlCacheService.get(shortCode);
+    if (cached) return cached;
+
     const record = await this.prisma.url.findUnique({
       where: { shortCode },
     });
-
     if (!record) {
       throw new NotFoundException(`Short Code '${shortCode}' not found.`);
     }
 
+    await this.urlCacheService.set(record);
     return record;
   }
 
@@ -146,6 +161,8 @@ export class UrlsService {
       await this.prisma.url.delete({
         where: { shortCode },
       });
+
+      await this.urlCacheService.invalidate(shortCode);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
         throw new NotFoundException(`Short Code '${shortCode}' not found.`);
@@ -173,6 +190,7 @@ export class UrlsService {
         },
       });
 
+      await this.urlCacheService.invalidate(shortCode);
       return this.toResponseDto(urlRecord);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
