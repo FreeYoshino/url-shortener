@@ -6,12 +6,24 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_DB: ${DB_DATABASE}
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--requirepass', '${REDIS_PASSWORD:?REDIS_PASSWORD is required}']
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -44,11 +56,15 @@ services:
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-30}
       THROTTLE_WRITE_LIMIT: ${THROTTLE_WRITE_LIMIT:-10}
       THROTTLE_REDIRECT_LIMIT: ${THROTTLE_REDIRECT_LIMIT:-60}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
+      URL_CACHE_TTL_MS: ${URL_CACHE_TTL_MS:-60000}
     ports:
       - '${APP_PORT:-3000}:3000'
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
       test:
         [

@@ -16,6 +16,16 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    # Testing only: in-memory, no exposed ports, ephemeral
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   test:
     build:
       context: .
@@ -23,7 +33,11 @@ services:
     environment:
       NODE_ENV: test
       DATABASE_URL: postgresql://url_shortener_test:url_shortener_test@db:5432/url_shortener_test?schema=public
+      REDIS_URL: redis://redis:6379/15
+      URL_CACHE_TTL_MS: 60000
     command: sh -c "npx prisma migrate deploy && npm run test && npm run test:e2e"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
