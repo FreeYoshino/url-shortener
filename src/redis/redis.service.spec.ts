@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import Redis from 'ioredis';
 import { RedisService } from './redis.service';
+import { ThrottledLogger } from '../common/throttled-logger';
 
 // The real client is not needed here: RedisService only wires lifecycle eventsand logging around it. The mock is an EventEmitter so the tests can drive the same events ioredis emits.
 jest.mock('ioredis', () => {
@@ -164,7 +165,7 @@ describe('RedisService', () => {
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
 
-      nowSpy.mockReturnValue(1_000_000 + RedisService.ERROR_LOG_INTERVAL_MS);
+      nowSpy.mockReturnValue(1_000_000 + ThrottledLogger.DEFAULT_INTERVAL_MS);
 
       client.emit('error', new Error('boom'));
 

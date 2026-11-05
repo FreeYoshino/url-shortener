@@ -3,6 +3,7 @@ import { Url } from '../generated/prisma/client';
 import { RedisService } from '../redis/redis.service';
 import { ConfigService } from '@nestjs/config';
 import { describeRedisError } from '../redis/redis-error';
+import { ThrottledLogger } from '../common/throttled-logger';
 
 export type UrlCacheEntry = Pick<
   Url,
@@ -11,11 +12,6 @@ export type UrlCacheEntry = Pick<
 
 @Injectable()
 export class UrlCacheService {
-  /**
-   * The interval in milliseconds between logging error messages.
-   */
-  static readonly ERROR_LOG_INTERVAL_MS = 10000;
-
   /** Redis key namespace, keeping URL cache separate from throttler counters. */
   private static readonly KEY_PREFIX = 'url:';
 
@@ -26,8 +22,10 @@ export class UrlCacheService {
    */
   private readonly logger = new Logger(UrlCacheService.name);
 
-  /** Throttle per operation so one failing command cannot hide another. */
-  private readonly lastLoggedAt = new Map<string, number>();
+  /**
+   * The throttle logger instance for logging Redis events with throttling.
+   */
+  private readonly throttledLogger = new ThrottledLogger(this.logger);
 
   /**
    * The time-to-live (TTL) for cached URLs in milliseconds.
@@ -147,18 +145,13 @@ export class UrlCacheService {
   }
 
   /**
-   * Logs a warning for one event kind at most once per
-   * {@link UrlCacheService.ERROR_LOG_INTERVAL_MS}.
+   * Logs a warning for one event kind at most once per {@link ThrottledLogger.DEFAULT_INTERVAL_MS}.
    *
    * @param kind - The event kind whose throttle window is used.
    * @param message - The warning message to log.
    * @returns void
    */
   private warn(kind: string, message: string): void {
-    const now = Date.now();
-    if (now - (this.lastLoggedAt.get(kind) ?? 0) < UrlCacheService.ERROR_LOG_INTERVAL_MS) return;
-
-    this.lastLoggedAt.set(kind, now);
-    this.logger.warn(message);
+    this.throttledLogger.warn(kind, message);
   }
 }

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RedisService } from '../redis/redis.service';
 import { UrlCacheEntry, UrlCacheService } from './url-cache.service';
+import { ThrottledLogger } from '../common/throttled-logger';
 
 describe('UrlCacheService', () => {
   let service: UrlCacheService;
@@ -185,7 +186,7 @@ describe('UrlCacheService', () => {
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
 
-      nowSpy.mockReturnValue(1_000_000 + UrlCacheService.ERROR_LOG_INTERVAL_MS);
+      nowSpy.mockReturnValue(1_000_000 + ThrottledLogger.DEFAULT_INTERVAL_MS);
 
       await service.get(shortCode);
 

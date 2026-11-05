@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { describeRedisError } from './redis-error';
+import { ThrottledLogger } from '../common/throttled-logger';
 
 /**
  * Service responsible for managing Redis cache operations.
@@ -9,17 +10,14 @@ import { describeRedisError } from './redis-error';
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   /**
-   * The interval in milliseconds between logging error messages.
-   */
-  static readonly ERROR_LOG_INTERVAL_MS = 10000;
-
-  /**
    * The logger instance for logging messages related to Redis operations.
    */
   private readonly logger = new Logger(RedisService.name);
 
-  /** Throttle per event kind so a `close` cannot swallow the `error` after it. */
-  private readonly lastLoggedAt = new Map<string, number>();
+  /**
+   * The throttle logger instance for logging Redis events with throttling.
+   */
+  private readonly throttledLogger = new ThrottledLogger(this.logger);
 
   /** Suppress disconnect warnings during an intentional shutdown. */
   private shuttingDown = false;
@@ -60,8 +58,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Logs a warning for one event kind at most once per
-   * {@link RedisService.ERROR_LOG_INTERVAL_MS}.
+   * Logs a warning for one event kind at most once per {@link ThrottledLogger.DEFAULT_INTERVAL_MS}.
    *
    * @param kind - The event kind whose throttle window is used.
    * @param message - The warning message to log.
@@ -70,10 +67,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private warn(kind: string, message: string): void {
     if (this.shuttingDown) return;
 
-    const now = Date.now();
-    if (now - (this.lastLoggedAt.get(kind) ?? 0) < RedisService.ERROR_LOG_INTERVAL_MS) return;
-
-    this.lastLoggedAt.set(kind, now);
-    this.logger.warn(message);
+    this.throttledLogger.warn(kind, message);
   }
 }
