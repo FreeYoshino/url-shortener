@@ -2,6 +2,7 @@ import { INestApplication, HttpStatus } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { createApp } from './utils/create-app';
+import { closeApp } from './utils/close-app';
 
 describe('Distributed Throttler (e2e)', () => {
   let appA: INestApplication<App>;
@@ -16,8 +17,8 @@ describe('Distributed Throttler (e2e)', () => {
   });
 
   afterAll(async () => {
-    await appA.close();
-    await appB.close();
+    await closeApp(appA);
+    await closeApp(appB);
   });
 
   it('should share throttle state between two instances', async () => {
@@ -62,7 +63,7 @@ describe('Distributed Throttler (e2e)', () => {
         .expect(HttpStatus.TOO_MANY_REQUESTS)
         .expect('Retry-After', /\d+/);
     } finally {
-      if (firstApp) await firstApp.close();
+      if (firstApp) await closeApp(firstApp);
     }
 
     // restart the app to simulate a crash or redeployment
@@ -78,7 +79,7 @@ describe('Distributed Throttler (e2e)', () => {
         .expect(HttpStatus.TOO_MANY_REQUESTS)
         .expect('Retry-After', /\d+/);
     } finally {
-      if (secondApp) await secondApp.close();
+      if (secondApp) await closeApp(secondApp);
     }
   });
 
@@ -139,7 +140,7 @@ describe('Distributed Throttler (e2e)', () => {
         .expect(HttpStatus.TOO_MANY_REQUESTS)
         .expect('Retry-After', /\d+/);
     } finally {
-      if (app) await app.close();
+      if (app) await closeApp(app);
       if (previousTtl === undefined) delete process.env.THROTTLE_TTL_MS;
       else process.env.THROTTLE_TTL_MS = previousTtl;
     }
