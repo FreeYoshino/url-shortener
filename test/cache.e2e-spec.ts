@@ -1,12 +1,10 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, HttpStatus } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
-import { setupApp } from '../src/setup-app';
 import { waitFor } from './utils/wait-for';
+import { createApp } from './utils/create-app';
 
 describe('Cache (e2e)', () => {
   let app: INestApplication<App>;
@@ -14,13 +12,7 @@ describe('Cache (e2e)', () => {
   let redis: RedisService;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    setupApp(app);
-    await app.init();
+    app = await createApp();
 
     prisma = app.get(PrismaService);
     redis = app.get(RedisService);
