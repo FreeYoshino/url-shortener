@@ -7,24 +7,38 @@ import { setupApp } from '../../src/setup-app';
 import { waitFor } from './wait-for';
 
 /**
+ * Options for creating an e2e application with the production bootstrap applied.
+ */
+export interface CreateAppOptions {
+  /**
+   * Whether to wait for the Redis client to be ready before returning the application instance.
+   */
+  waitForRedisReady?: boolean;
+}
+
+/**
  * Builds an e2e application with the production bootstrap applied and waitsuntil its Redis client is ready.
  *
  * RedisService starts connecting without blocking startup (fail-open).
  * Without this wait, the first request of a test can race the connection and silently bypass the rate limiter or the cache.
  */
-export async function createApp(): Promise<INestApplication<App>> {
+export async function createApp(options: CreateAppOptions = {}): Promise<INestApplication<App>> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
     imports: [AppModule],
   }).compile();
+
+  const { waitForRedisReady = true } = options;
 
   const app = moduleFixture.createNestApplication();
   setupApp(app);
   await app.init();
 
   const redis = app.get(RedisService);
-  await waitFor(async () => (redis.client.status === 'ready' ? true : null), {
-    description: 'Redis client to be ready',
-  });
+  if (waitForRedisReady) {
+    await waitFor(async () => (redis.client.status === 'ready' ? true : null), {
+      description: 'Redis client to be ready',
+    });
+  }
 
   return app;
 }
