@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { disconnectRedis } from './utils/disconnect-redis';
 
 const redisUrl = process.env.REDIS_URL;
 
@@ -23,6 +24,6 @@ beforeEach(async () => {
   await client.flushdb();
 });
 
-afterAll(() => {
-  client.disconnect();
+afterAll(async () => {
+  await disconnectRedis(client);
 });
