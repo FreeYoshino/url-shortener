@@ -133,7 +133,7 @@ describe('Cache (e2e)', () => {
     // wait a second to ensure the click records are processed
     await waitFor(() =>
       prisma.urlClick
-        .count({ where: { urlId: res.body.id } })
+        .count({ where: { urlId: urlRecord?.id } })
         .then((count) => (count >= 2 ? count : null)),
     );
 
