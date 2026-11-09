@@ -120,8 +120,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://url_shortener:url_shortener@localhost:5432/url_shortener_test?schema=public
+      REDIS_URL: redis://127.0.0.1:6379/15
     steps:
       # Pull the code from the repository
       - name: Checkout code
@@ -190,8 +200,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://url_shortener:url_shortener@localhost:5432/url_shortener?schema=public
+      REDIS_URL: redis://127.0.0.1:6379/15
     steps:
       # Pull the code from the repository
       - name: Checkout code
@@ -220,7 +240,9 @@ jobs:
       - name: Smoke test production image
         run: |
           docker run -d --name app --network host \
-            -e DATABASE_URL="$DATABASE_URL" -e PORT=3000 \
+            -e DATABASE_URL="$DATABASE_URL"\
+            -e REDIS_URL="$REDIS_URL"\
+            -e PORT=3000 \
             url-shortener:ci
           trap 'docker logs app || true' EXIT
           for i in $(seq 1 30); do

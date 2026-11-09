@@ -2,13 +2,16 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { RedisThrottlerStorage } from './redis-throttler-storage';
+import { RedisModule } from '../redis/redis.module';
+import { RedisService } from '../redis/redis.service';
 
 @Module({
   imports: [
     ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      imports: [ConfigModule, RedisModule],
+      inject: [ConfigService, RedisService],
+      useFactory: (configService: ConfigService, redisService: RedisService) => ({
         throttlers: [
           {
             name: 'default',
@@ -17,6 +20,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
           },
         ],
         errorMessage: 'Too many requests, please try again later.',
+        storage: new RedisThrottlerStorage(redisService),
 
         // TODO: Add Custom Tracker to avoid docker container IPs being counted as unique users
       }),

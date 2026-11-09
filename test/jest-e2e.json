@@ -9,5 +9,6 @@
   "moduleNameMapper": {
     "^(\\.{1,2}/.*)\\.js$": "$1"
   },
-  "setupFiles": ["<rootDir>/setup-e2e.ts"]
+  "setupFiles": ["<rootDir>/setup-e2e.ts"],
+  "setupFilesAfterEnv": ["<rootDir>/setup-redis.ts"]
 }

@@ -1,10 +1,8 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, HttpStatus } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { setupApp } from '../src/setup-app';
+import { createApp } from './utils/create-app';
 
 describe('Throttle Limits', () => {
   let app: INestApplication<App>;
@@ -15,14 +13,7 @@ describe('Throttle Limits', () => {
     process.env.THROTTLE_WRITE_LIMIT = '2';
     process.env.THROTTLE_REDIRECT_LIMIT = '2';
 
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    setupApp(app);
-
-    await app.init();
+    app = await createApp();
     prisma = app.get(PrismaService);
   });
 

@@ -1,30 +1,16 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, HttpStatus } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { setupApp } from '../src/setup-app';
 import { waitFor } from './utils/wait-for';
+import { createApp } from './utils/create-app';
 
 describe('RedirectController (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-
-    // Replicate the production bootstrap (src/main.ts). Test.createTestingModule
-    // does NOT apply the global pipe or the `api` prefix on its own, so without
-    // this the validation rules would silently not run.
-    setupApp(app);
-
-    await app.init();
-
+    app = await createApp();
     prisma = app.get(PrismaService);
   });
 

@@ -4,6 +4,7 @@ import { UrlsService } from './urls.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { nanoid } from 'nanoid';
 import { Prisma } from '../generated/prisma/client';
+import { UrlCacheService } from './url-cache.service';
 
 // mock naoid package to avoid generating actual short codes during testing
 jest.mock('nanoid', () => {
@@ -54,6 +55,13 @@ describe('UrlsService', () => {
     },
   };
 
+  let urlCacheService: UrlCacheService;
+  const mockUrlCacheService = {
+    get: jest.fn(),
+    set: jest.fn(),
+    invalidate: jest.fn(),
+  };
+
   // fixed values used to assert the ResponseUrlDto output
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const updatedAt = new Date('2026-01-01T00:00:00.000Z');
@@ -68,13 +76,23 @@ describe('UrlsService', () => {
           provide: PrismaService,
           useValue: mockPrismaService,
         },
+        {
+          provide: UrlCacheService,
+          useValue: mockUrlCacheService,
+        },
       ],
     }).compile();
 
     service = module.get<UrlsService>(UrlsService);
     prisma = module.get<PrismaService>(PrismaService);
+    urlCacheService = module.get<UrlCacheService>(UrlCacheService);
 
     jest.clearAllMocks(); // clear mocks before each test to avoid interference
+
+    // Cache defaults: a miss, and no-op writes unless a test overrides them.
+    mockUrlCacheService.get.mockReset().mockResolvedValue(null);
+    mockUrlCacheService.set.mockReset().mockResolvedValue(undefined);
+    mockUrlCacheService.invalidate.mockReset().mockResolvedValue(undefined);
   });
 
   it('should be defined', () => {
@@ -102,6 +120,17 @@ describe('UrlsService', () => {
       });
     });
 
+    it('should call urlCacheService.set when original URL is already in the database', async () => {
+      const dto = { url: 'https://example.com' };
+
+      const existingUrl = { originalUrl: dto.url, shortCode: 'abc123', createdAt, updatedAt };
+      mockPrismaService.url.findUnique.mockResolvedValue(existingUrl);
+
+      await service.create(dto);
+
+      expect(urlCacheService.set).toHaveBeenCalledWith(existingUrl);
+    });
+
     it('should create a new short code (use nanoid) when the original URL is not in the database', async () => {
       const dto = { url: 'https://example.com' };
 
@@ -125,6 +154,22 @@ describe('UrlsService', () => {
         createdAt,
         updatedAt,
       });
+    });
+
+    it('should call urlCacheService.set when a new URL is created', async () => {
+      const dto = { url: 'https://example.com' };
+
+      mockPrismaService.url.findUnique.mockResolvedValue(null);
+
+      const mockShortCode = 'abc123';
+      mockNanoid.mockReturnValue(mockShortCode);
+
+      const newUrl = { originalUrl: dto.url, shortCode: mockShortCode, createdAt, updatedAt };
+      mockPrismaService.url.create.mockResolvedValue(newUrl);
+
+      await service.create(dto);
+
+      expect(urlCacheService.set).toHaveBeenCalledWith(newUrl);
     });
 
     it('should retry generating a unique short code if P2002 shortCode conflict occurs', async () => {
@@ -151,6 +196,12 @@ describe('UrlsService', () => {
 
       expect(prisma.url.create).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
+        originalUrl: dto.url,
+        shortCode: shortCode2,
+        createdAt,
+        updatedAt,
+      });
+      expect(urlCacheService.set).toHaveBeenCalledWith({
         originalUrl: dto.url,
         shortCode: shortCode2,
         createdAt,
@@ -188,6 +239,29 @@ describe('UrlsService', () => {
       });
     });
 
+    it('should call urlCacheService.set when returning existing URL after P2002 originalUrl conflict', async () => {
+      const dto = { url: 'https://example.com' };
+
+      const existingUrl = {
+        originalUrl: dto.url,
+        shortCode: 'existingCode',
+        createdAt,
+        updatedAt,
+      };
+      mockPrismaService.url.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(existingUrl); // return existing URL on second call
+
+      const shortCode1 = 'conflict1';
+      mockNanoid.mockReturnValueOnce(shortCode1);
+
+      mockPrismaService.url.create.mockRejectedValueOnce(uniqueViolation()); // first attempt fails with P2002
+
+      await service.create(dto);
+
+      expect(urlCacheService.set).toHaveBeenCalledWith(existingUrl);
+    });
+
     it('should throw InternalServerErrorException for other database errors', async () => {
       const dto = { url: 'https://example.com' };
 
@@ -198,6 +272,7 @@ describe('UrlsService', () => {
       mockPrismaService.url.create.mockRejectedValueOnce(new Error('Database error'));
 
       await expect(service.create(dto)).rejects.toThrow(InternalServerErrorException);
+      expect(urlCacheService.set).not.toHaveBeenCalled();
     });
 
     it('should throw ConflictException if unable to generate a unique short code after max retries', async () => {
@@ -211,19 +286,65 @@ describe('UrlsService', () => {
 
       await expect(service.create(dto)).rejects.toThrow(ConflictException);
       expect(mockNanoid).toHaveBeenCalledTimes(UrlsService.MAX_RETRIES);
+      expect(urlCacheService.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('requireUrlRecord', () => {
+    const shortCode = 'shortCode123';
+    const urlRecord = {
+      id: 'url-id',
+      originalUrl: 'https://example.com',
+      shortCode,
+      createdAt,
+      updatedAt,
+    };
+
+    it('should return the cached record without querying the database', async () => {
+      mockUrlCacheService.get.mockResolvedValue(urlRecord);
+
+      const result = await service.requireUrlRecord(shortCode);
+
+      expect(result).toEqual(urlRecord);
+      expect(mockUrlCacheService.get).toHaveBeenCalledWith(shortCode);
+      expect(prisma.url.findUnique).not.toHaveBeenCalled();
+      expect(mockUrlCacheService.set).not.toHaveBeenCalled();
+    });
+
+    it('should query the database on a cache miss and populate the cache', async () => {
+      mockUrlCacheService.get.mockResolvedValue(null);
+      mockPrismaService.url.findUnique.mockResolvedValue(urlRecord);
+
+      const result = await service.requireUrlRecord(shortCode);
+
+      expect(result).toEqual(urlRecord);
+      expect(mockUrlCacheService.get).toHaveBeenCalledWith(shortCode);
+      expect(prisma.url.findUnique).toHaveBeenCalledWith({ where: { shortCode } });
+      expect(mockUrlCacheService.set).toHaveBeenCalledWith(urlRecord);
+    });
+
+    it('should throw NotFoundException and not cache a missing short code', async () => {
+      mockUrlCacheService.get.mockResolvedValue(null);
+      mockPrismaService.url.findUnique.mockResolvedValue(null);
+
+      await expect(service.requireUrlRecord(shortCode)).rejects.toThrow(
+        new NotFoundException(`Short Code '${shortCode}' not found.`),
+      );
+      expect(mockUrlCacheService.set).not.toHaveBeenCalled();
     });
   });
 
   describe('findByShortCode', () => {
-    it('should return the URL info when the short code exists', async () => {
-      const shortCode = 'shortCode123';
-      const urlRecord = {
-        originalUrl: 'https://example.com',
-        shortCode,
-        createdAt,
-        updatedAt,
-      };
+    const shortCode = 'shortCode123';
+    const urlRecord = {
+      id: 'url-id',
+      originalUrl: 'https://example.com',
+      shortCode,
+      createdAt,
+      updatedAt,
+    };
 
+    it('should return the URL info when the short code exists', async () => {
       mockPrismaService.url.findUnique.mockResolvedValue(urlRecord);
 
       const result = await service.findByShortCode(shortCode);
@@ -237,14 +358,31 @@ describe('UrlsService', () => {
         createdAt,
         updatedAt,
       });
+      expect(mockUrlCacheService.set).toHaveBeenCalledWith(urlRecord);
+    });
+
+    it('should serve the response from cache without querying the database', async () => {
+      mockUrlCacheService.get.mockResolvedValue(urlRecord);
+
+      const result = await service.findByShortCode(shortCode);
+
+      expect(result).toEqual({
+        originalUrl: 'https://example.com',
+        shortCode,
+        createdAt,
+        updatedAt,
+      });
+      expect(mockUrlCacheService.get).toHaveBeenCalledWith(shortCode);
+      expect(prisma.url.findUnique).not.toHaveBeenCalled();
+      expect(mockUrlCacheService.set).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when the short code does not exist', async () => {
-      const shortCode = 'nonExistentCode';
+      const missingCode = 'nonExistentCode';
       mockPrismaService.url.findUnique.mockResolvedValue(null);
 
-      await expect(service.findByShortCode(shortCode)).rejects.toThrow(
-        new NotFoundException(`Short Code '${shortCode}' not found.`),
+      await expect(service.findByShortCode(missingCode)).rejects.toThrow(
+        new NotFoundException(`Short Code '${missingCode}' not found.`),
       );
     });
   });
@@ -258,6 +396,15 @@ describe('UrlsService', () => {
       expect(prisma.url.delete).toHaveBeenCalledWith({ where: { shortCode } });
     });
 
+    it('should call urlCacheService.invalidate when a URL is deleted', async () => {
+      const shortCode = 'abc1234';
+      mockPrismaService.url.delete.mockResolvedValue({ id: 1, shortCode });
+
+      await service.delete(shortCode);
+
+      expect(urlCacheService.invalidate).toHaveBeenCalledWith(shortCode);
+    });
+
     it('should throw NotFoundException when the short code does not exist(P2025 occurrence)', async () => {
       const shortCode = 'nonExistentCode';
       mockPrismaService.url.delete.mockRejectedValue(
@@ -268,13 +415,15 @@ describe('UrlsService', () => {
       );
 
       await expect(service.delete(shortCode)).rejects.toThrow(NotFoundException);
+      expect(urlCacheService.invalidate).not.toHaveBeenCalled();
     });
 
-    it('should throw error for other database errors', async () => {
+    it('should throw error for other database errors and not invalidate the cache', async () => {
       const shortCode = 'abc1234';
       mockPrismaService.url.delete.mockRejectedValue(new Error('Database error'));
 
       await expect(service.delete(shortCode)).rejects.toThrow('Database error');
+      expect(urlCacheService.invalidate).not.toHaveBeenCalled();
     });
   });
 
@@ -305,6 +454,23 @@ describe('UrlsService', () => {
       });
     });
 
+    it('should call urlCacheService.invalidate when a URL is updated', async () => {
+      const shortCode = 'abc1234';
+      const updateDto = { url: 'https://updated.com' };
+      const updatedUrlRecord = {
+        originalUrl: updateDto.url,
+        shortCode,
+        createdAt,
+        updatedAt,
+      };
+
+      mockPrismaService.url.update.mockResolvedValue(updatedUrlRecord);
+
+      await service.update(shortCode, updateDto);
+
+      expect(urlCacheService.invalidate).toHaveBeenCalledWith(shortCode);
+    });
+
     it('should throw NotFoundException when the short code does not exist', async () => {
       const shortCode = 'nonExistentCode';
       const updateDto = { url: 'https://updated.com' };
@@ -317,14 +483,16 @@ describe('UrlsService', () => {
       );
 
       await expect(service.update(shortCode, updateDto)).rejects.toThrow(NotFoundException);
+      expect(urlCacheService.invalidate).not.toHaveBeenCalled();
     });
 
-    it('should throw error for other database errors', async () => {
+    it('should throw error for other database errors and not invalidate the cache', async () => {
       const shortCode = 'abc1234';
       const updateDto = { url: 'https://updated.com' };
       mockPrismaService.url.update.mockRejectedValue(new Error('Database error'));
 
       await expect(service.update(shortCode, updateDto)).rejects.toThrow('Database error');
+      expect(urlCacheService.invalidate).not.toHaveBeenCalled();
     });
   });
 });
