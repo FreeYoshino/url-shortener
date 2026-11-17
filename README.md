@@ -39,18 +39,19 @@
 
 ## 架構
 
-請求會先經過全域 `ThrottlerGuard`（以 Redis 計數），通過後才進入 controller 與 `UrlsService`。讀取短網址時由 `UrlCacheService` 先查 Redis，cache miss 才透過 Prisma 查 PostgreSQL。
+請求會先經過全域 `ThrottlerGuard`：guard 會 `await` 一次 Redis 計數，超額就直接回 `429`，**不進入 controller**；未超額才放行到 controller 與 `UrlsService`。讀取短網址時由 `UrlCacheService` 先查 Redis，cache miss 才透過 Prisma 查 PostgreSQL。圖中實線是請求流、虛線是流程中的服務對 Redis 發出的呼叫。
 
 ```mermaid
 flowchart LR
   Client --> Guard[ThrottlerGuard]
-  Guard --> Store[RedisThrottlerStorage]
-  Store --> Redis[(Redis)]
-  Guard -->|allow| Controller
+  Guard -->|未超額| Controller[Controller]
+  Guard -->|超額| E429[429 Too Many Requests]
+  Guard -.->|INCR / 檢查| Store[RedisThrottlerStorage]
+  Store -.-> Redis[(Redis)]
   Controller --> Service[UrlsService]
   Service --> Cache[UrlCacheService]
-  Cache --> Redis
-  Cache -- miss --> Prisma[Prisma]
+  Cache -.->|get / set / del| Redis
+  Cache -->|miss| Prisma[Prisma]
   Prisma --> Postgres[(PostgreSQL)]
 ```
 
