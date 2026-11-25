@@ -3,6 +3,7 @@ import { RedirectController } from './redirect.controller';
 import { UrlsService } from './urls.service';
 import { AnalyticsService } from './analytics.service';
 import { NotFoundException, HttpStatus } from '@nestjs/common';
+import { URLS_MODULE_OPTIONS, UrlsModuleOptions } from './urls-module.options';
 
 describe('RedirectController', () => {
   let controller: RedirectController;
@@ -39,6 +40,10 @@ describe('RedirectController', () => {
         {
           provide: AnalyticsService,
           useValue: mockAnalyticsService,
+        },
+        {
+          provide: URLS_MODULE_OPTIONS,
+          useValue: { adminApi: true, allowedHosts: [] }, // Mocked options for testing
         },
       ],
     }).compile();
@@ -87,6 +92,51 @@ describe('RedirectController', () => {
       await expect(controller.redirect(shortCode)).rejects.toThrow(NotFoundException);
 
       expect(urlsService.requireUrlRecord).toHaveBeenCalled();
+    });
+  });
+
+  describe('allowlist backstop', () => {
+    /**
+     * The helper function to build a RedirectController instance with the provided options.
+     *
+     * @param options - The UrlsModuleOptions to be injected into the RedirectController.
+     * @returns A Promise resolving to a new instance of RedirectController.
+     */
+    async function buildController(options: UrlsModuleOptions): Promise<RedirectController> {
+      const module = await Test.createTestingModule({
+        controllers: [RedirectController],
+        providers: [
+          { provide: UrlsService, useValue: mockUrlsService },
+          { provide: AnalyticsService, useValue: mockAnalyticsService },
+          { provide: URLS_MODULE_OPTIONS, useValue: options },
+        ],
+      }).compile();
+
+      return module.get<RedirectController>(RedirectController);
+    }
+
+    it('should throw NotFoundException if the original URL is not in the allowed hosts list', async () => {
+      const controller = await buildController({ adminApi: true, allowedHosts: ['allowed.com'] });
+      mockUrlsService.requireUrlRecord.mockResolvedValue({
+        ...mockUrlRecord,
+        originalUrl: 'https://notallowed.com',
+      });
+
+      await expect(controller.redirect(shortCode)).rejects.toThrow(NotFoundException);
+      expect(analyticsService.recordClick).not.toHaveBeenCalled();
+    });
+
+    it('should redirect normally if the original URL is in the allowed hosts list', async () => {
+      const controller = await buildController({ adminApi: true, allowedHosts: ['allowed.com'] });
+      mockUrlsService.requireUrlRecord.mockResolvedValue({
+        ...mockUrlRecord,
+        originalUrl: 'https://allowed.com',
+      });
+
+      await expect(controller.redirect(shortCode)).resolves.toEqual({
+        url: 'https://allowed.com',
+        statusCode: HttpStatus.FOUND,
+      });
     });
   });
 });

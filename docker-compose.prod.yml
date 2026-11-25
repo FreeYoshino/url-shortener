@@ -58,6 +58,8 @@ services:
       THROTTLE_REDIRECT_LIMIT: ${THROTTLE_REDIRECT_LIMIT:-60}
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
       URL_CACHE_TTL_MS: ${URL_CACHE_TTL_MS:-60000}
+      ENABLE_ADMIN_API: ${ENABLE_ADMIN_API:-true}
+      DEMO_ALLOWED_HOSTS: ${DEMO_ALLOWED_HOSTS:-}
     ports:
       - '${APP_PORT:-3000}:3000'
     depends_on:

@@ -1,55 +1,26 @@
-import {
-  Controller,
-  Post,
-  Body,
-  Delete,
-  HttpStatus,
-  Param,
-  HttpCode,
-  Put,
-  Get,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CreateUrlDto } from './dto/create-url.dto';
-import { UpdateUrlDto } from './dto/update-url.dto';
 import { UrlsService } from './urls.service';
-import { AnalyticsService } from './analytics.service';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLER_LIMITS } from '../throttler/throttler-limits';
+import { AllowedHostPipe } from './allowed-host.pipe';
 
 @Controller('urls')
 export class UrlsController {
   private readonly urlsService: UrlsService;
-  private readonly analyticsService: AnalyticsService;
 
-  constructor(urlsService: UrlsService, analyticsService: AnalyticsService) {
+  constructor(urlsService: UrlsService) {
     this.urlsService = urlsService;
-    this.analyticsService = analyticsService;
   }
 
   @Post()
   @Throttle({ default: { limit: THROTTLER_LIMITS.WRITE_LIMIT } })
-  create(@Body() dto: CreateUrlDto) {
+  create(@Body(AllowedHostPipe) dto: CreateUrlDto) {
     return this.urlsService.create(dto);
-  }
-
-  @Delete(':shortCode')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(@Param('shortCode') shortCode: string) {
-    await this.urlsService.delete(shortCode);
-  }
-
-  @Put(':shortCode')
-  update(@Param('shortCode') shortCode: string, @Body() dto: UpdateUrlDto) {
-    return this.urlsService.update(shortCode, dto);
   }
 
   @Get(':shortCode')
   get(@Param('shortCode') shortCode: string) {
     return this.urlsService.findByShortCode(shortCode);
-  }
-
-  @Get(':shortCode/statistics')
-  getStatistics(@Param('shortCode') shortCode: string) {
-    return this.analyticsService.getStatistics(shortCode);
   }
 }
