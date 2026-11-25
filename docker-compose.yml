@@ -53,6 +53,8 @@ services:
       TSC_WATCHDIRECTORY: RecursiveDirectoryUsingDynamicPriorityPolling
       REDIS_URL: redis://redis:6379/0
       URL_CACHE_TTL_MS: ${URL_CACHE_TTL_MS:-60000}
+      ENABLE_ADMIN_API: ${ENABLE_ADMIN_API:-true}
+      DEMO_ALLOWED_HOSTS: ${DEMO_ALLOWED_HOSTS:-}
     ports:
       - '${PORT:-3000}:3000'
     volumes:
