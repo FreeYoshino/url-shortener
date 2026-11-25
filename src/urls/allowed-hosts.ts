@@ -66,7 +66,7 @@ export function isAllowedHost(input: string, allowedHosts: string[]): boolean {
   let url: URL;
   try {
     url = new URL(input);
-  } catch (error) {
+  } catch {
     return false;
   }
 
