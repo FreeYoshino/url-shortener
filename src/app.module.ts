@@ -6,12 +6,16 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UrlsModule } from './urls/urls.module';
 import { AppThrottlerModule } from './throttler/app-throttler.module';
 import { RedisModule } from './redis/redis.module';
+import { parseAllowedHosts } from './urls/allowed-hosts';
 
 @Module({
   imports: [
     PrismaModule,
     RedisModule,
-    UrlsModule,
+    UrlsModule.register({
+      adminApi: process.env.ADMIN_API !== 'false',
+      allowedHosts: parseAllowedHosts(process.env.DEMO_ALLOWED_HOSTS),
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
     }),
