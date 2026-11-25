@@ -3,6 +3,7 @@ import { UrlsService } from './urls.service';
 import { AnalyticsService } from './analytics.service';
 import { UrlCacheService } from './url-cache.service';
 import { UrlsController } from './urls.controller';
+import { AdminUrlsController } from './admin-urls.controller';
 import { RedirectController } from './redirect.controller';
 import { validateAllowedHosts } from './allowed-hosts';
 import { UrlsModuleOptions, URLS_MODULE_OPTIONS } from './urls-module.options';
@@ -26,7 +27,11 @@ export class UrlsModule {
           },
         },
       ],
-      controllers: [UrlsController, RedirectController],
+      controllers: [
+        UrlsController,
+        RedirectController,
+        ...(options.adminApi ? [AdminUrlsController] : []),
+      ],
     };
   }
 }
