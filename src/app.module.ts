@@ -13,7 +13,7 @@ import { parseAllowedHosts } from './urls/allowed-hosts';
     PrismaModule,
     RedisModule,
     UrlsModule.register({
-      adminApi: process.env.ADMIN_API !== 'false',
+      adminApi: process.env.ENABLE_ADMIN_API !== 'false',
       allowedHosts: parseAllowedHosts(process.env.DEMO_ALLOWED_HOSTS),
     }),
     ConfigModule.forRoot({
