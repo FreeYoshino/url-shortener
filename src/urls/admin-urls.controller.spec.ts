@@ -5,6 +5,7 @@ import { UrlsService } from './urls.service';
 import { AnalyticsService } from './analytics.service';
 import { ResponseUrlDto } from './dto/response-url.dto';
 import { StatisticsUrlDto } from './dto/statistics-url.dto';
+import { URLS_MODULE_OPTIONS } from './urls-module.options';
 
 describe('AdminUrlsController', () => {
   let controller: AdminUrlsController;
@@ -42,6 +43,10 @@ describe('AdminUrlsController', () => {
         {
           provide: AnalyticsService,
           useValue: mockAnalyticsService,
+        },
+        {
+          provide: URLS_MODULE_OPTIONS,
+          useValue: { adminApi: true, allowedHosts: [] }, // Mocked options for testing
         },
       ],
     }).compile();

@@ -7,6 +7,7 @@ import { AdminUrlsController } from './admin-urls.controller';
 import { RedirectController } from './redirect.controller';
 import { validateAllowedHosts } from './allowed-hosts';
 import { UrlsModuleOptions, URLS_MODULE_OPTIONS } from './urls-module.options';
+import { AllowedHostPipe } from './allowed-host.pipe';
 
 @Module({})
 export class UrlsModule {
@@ -19,6 +20,7 @@ export class UrlsModule {
         UrlsService,
         AnalyticsService,
         UrlCacheService,
+        AllowedHostPipe,
         {
           provide: URLS_MODULE_OPTIONS,
           useValue: {

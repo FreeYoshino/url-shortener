@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Put } from 
 import { UpdateUrlDto } from './dto/update-url.dto';
 import { UrlsService } from './urls.service';
 import { AnalyticsService } from './analytics.service';
+import { AllowedHostPipe } from './allowed-host.pipe';
 
 @Controller('urls')
 export class AdminUrlsController {
@@ -20,7 +21,7 @@ export class AdminUrlsController {
   }
 
   @Put(':shortCode')
-  update(@Param('shortCode') shortCode: string, @Body() dto: UpdateUrlDto) {
+  update(@Param('shortCode') shortCode: string, @Body(AllowedHostPipe) dto: UpdateUrlDto) {
     return this.urlsService.update(shortCode, dto);
   }
 

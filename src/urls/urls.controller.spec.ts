@@ -4,6 +4,7 @@ import { UrlsController } from './urls.controller';
 import { UrlsService } from './urls.service';
 import { CreateUrlDto } from './dto/create-url.dto';
 import { ResponseUrlDto } from './dto/response-url.dto';
+import { URLS_MODULE_OPTIONS } from './urls-module.options';
 
 describe('UrlsController', () => {
   let controller: UrlsController;
@@ -32,6 +33,10 @@ describe('UrlsController', () => {
         {
           provide: UrlsService,
           useValue: mockUrlsService,
+        },
+        {
+          provide: URLS_MODULE_OPTIONS,
+          useValue: { adminApi: true, allowedHosts: [] }, // Mocked options for testing
         },
       ],
     }).compile();
