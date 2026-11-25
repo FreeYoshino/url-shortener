@@ -1,6 +1,6 @@
 # url-shortener — 短網址服務
 
-一個基於 **NestJS** 建構的 URL Shortening Service（短網址服務），靈感來自 [roadmap.sh](https://roadmap.sh) 的 URL Shortening Service 專案。提供長網址縮短、短碼重定向、點擊統計、Redis 快取與分散式請求限流等功能。
+一個基於 **NestJS** 建構的 URL Shortening Service（短網址服務），靈感來自 [roadmap.sh](https://roadmap.sh) 的 URL Shortening Service 專案。提供長網址縮短、短碼重定向、點擊統計、Redis 快取、分散式請求限流，以及可切換的管理 API 與轉址目標白名單等功能。
 
 ## 目錄
 
@@ -10,6 +10,7 @@
 - [開始使用](#開始使用)
 - [Redis 快取](#redis-快取)
 - [請求限流](#請求限流)
+- [API 介面開關與 Demo 暴露面](#api-介面開關與-demo-暴露面)
 - [失敗邊界](#失敗邊界)
 - [效能基準](#效能基準)
 - [專案結構](#專案結構)
@@ -33,9 +34,11 @@
 
 - **短網址生成** — `POST /api/urls`：提交長網址，產生唯一短碼並儲存（同一網址重複提交會回同一短碼）。
 - **短網址重定向** — `GET /:shortCode`：依短碼查詢並以 `302` 重定向至原始網址，查無短碼回 `404`。
-- **點擊統計** — `GET /api/urls/:shortCode/statistics`：回傳該短網址的建立／更新時間與累計點擊次數。
+- **點擊統計** — `GET /api/urls/:shortCode/statistics`：回傳該短網址的建立／更新時間與累計點擊次數（端點可由 `ENABLE_ADMIN_API=false` 卸載）。
 - **Redis 快取** — `GET /:shortCode` 與 `GET /api/urls/:shortCode` 共用讀取快取，命中時不查 DB。
 - **分散式請求限流** — 依來源 IP 限制各端點頻率，計數存放於 Redis，多個 instance 共用；超額回 `429`。
+- **API 暴露面開關** — `ENABLE_ADMIN_API=false` 時卸載 `PUT` / `DELETE` / `statistics`，管理路由回 `404`。
+- **轉址目標白名單** — 只接受 `http` / `https`，hostname 精確比對；create / update 違反回 `400`，白名單收緊前的既有資料轉址回 `404`。
 
 ## 架構
 
@@ -67,7 +70,7 @@ flowchart LR
 cp .env.example .env
 ```
 
-`.env` 的設定分成四組。
+`.env` 的設定分成五組。
 
 **1. 資料庫**（兩者必須指向同一個資料庫）
 
@@ -96,7 +99,16 @@ cp .env.example .env
 
 四個變數皆為選填，未設定時採用上表預設值。額度是在**每個請求**當下讀取環境變數後才解析，因此調整這些值只需重啟服務，不需要重新建置；計數本身存放於 Redis。
 
-**正式環境**使用另一份 `.env.production`（從 `.env.production.example` 複製），需填 `DB_*`、`REDIS_PASSWORD`、`APP_PORT` 與限流參數；`DATABASE_URL` 與 `REDIS_URL` 由 `docker-compose.prod.yml` 以服務名組出，避免兩處設定不同步。Compose **不會自動載入** `.env.production`，所有指令都要帶 `--env-file`（見「方式四」）。
+**5. API 介面開關與 demo 暴露面**（詳見「API 介面開關與 Demo 暴露面」一節）
+
+| 變數                 | 說明                                                                | 預設   |
+| :------------------- | :------------------------------------------------------------------ | :----- |
+| `ENABLE_ADMIN_API`   | 只有字面 `false` 會卸載管理端點；其他值皆視為開啟                   | `true` |
+| `DEMO_ALLOWED_HOSTS` | 逗號分隔的精確 hostname；空字串 = 不限制 host（協定仍限 `http(s)`） | 空     |
+
+兩者都在 app 啟動時讀取，修改後需重啟。`DEMO_ALLOWED_HOSTS` 格式不合法（scheme、port、path、wildcard、底線、Unicode 等）會讓 app **啟動失敗**，不是靜默忽略。`.env` 只負責插值；容器內要拿到值，compose 的 `environment` 必須有對應條目（dev 與 prod 兩份都已加入）。
+
+**正式環境**使用另一份 `.env.production`（從 `.env.production.example` 複製），需填 `DB_*`、`REDIS_PASSWORD`、`APP_PORT` 與限流參數；`DATABASE_URL` 與 `REDIS_URL` 由 `docker-compose.prod.yml` 以服務名組出，避免兩處設定不同步。Compose **不會自動載入** `.env.production`，所有指令都要帶 `--env-file`（見「方式四」）。`.env.production.example` 另含 `ENABLE_ADMIN_API` / `DEMO_ALLOWED_HOSTS`，預設是 demo profile（`false` + 白名單）。
 
 ### 2. 方式一：全容器開發（推薦）
 
@@ -111,6 +123,8 @@ docker compose exec app npx prisma migrate deploy
 ```
 
 服務位址：`http://localhost:3000/api`；Redis 開發環境映射到 `127.0.0.1:6379`。
+
+`.env` 的 `ENABLE_ADMIN_API` / `DEMO_ALLOWED_HOSTS` 會由 compose 插值進容器；修改後執行 `docker compose up -d`（compose 會 recreate app）。demo profile 的設定與驗證方式見「API 介面開關與 Demo 暴露面」。
 
 - 修改 `schema.prisma` 後產生遷移（遷移檔會寫回宿主機的 `prisma/`，並觸發容器內的 `prisma generate`）：
   ```bash
@@ -170,6 +184,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 - `migrate` 屬於 `tools` profile，平常的 `up` 不會執行它 —— **順序不能顛倒**，否則 app 會連上一個沒有資料表的資料庫。
 - app 服務設有 healthcheck，`docker compose --env-file .env.production -f docker-compose.prod.yml ps` 應顯示 `healthy`。但它只確認 HTTP 服務已啟動（`GET /api` 不查資料庫），若漏跑遷移，`healthy` 照樣出現，實際打 API 才會回 `500`。
 - Redis 以 `requirepass` 啟動，`REDIS_URL` 由 compose 以 `REDIS_PASSWORD` 組出；Redis 沒有資料卷，重啟後 cache / 限流狀態消失是預期行為。
+- demo profile 預設 `ENABLE_ADMIN_API=false`，並套用 `.env.production.example` 的 `DEMO_ALLOWED_HOSTS`。若白名單格式錯誤，app 會啟動失敗，容器依 `restart: unless-stopped` 反覆重啟；`docker compose --env-file .env.production -f docker-compose.prod.yml logs app` 會顯示 `Invalid allowed host "..."`。
 - 停止：把 `up -d --build` 換成 `down`（預設保留 `postgres_prod_data` 資料卷）。
 
 ### 6. 容器開發注意事項
@@ -267,6 +282,113 @@ Redis 只存放可重建的狀態，不是 source of truth；prod 的 Redis 沒�
 
 這一層的界線是**擋單一來源的濫用**（例如腳本灌爆資料庫），但依賴 Redis；Redis 故障期間會暫時放行。
 
+## API 介面開關與 Demo 暴露面
+
+短網址服務的 `POST /api/urls` ：公開部署時，任何人都能建立指向任意網站的連結。這個服務用兩個設定來收斂暴露面：
+
+- `ENABLE_ADMIN_API` — 決定管理端點是否掛載。
+- `DEMO_ALLOWED_HOSTS` — 限制建立、更新與轉址的目標 host。
+
+兩者都在 app 啟動時讀取，修改需重啟；白名單格式錯誤會讓啟動失敗（fail-fast）。
+
+### 管理 API 開關
+
+`ENABLE_ADMIN_API` 只有字面 `false` 會關閉；未設、空字串或任何其他值都視為開啟。關閉時 `AdminUrlsController` 不會被註冊：
+
+| 路由                                  | 未設 / `true` | `false`  |
+| :------------------------------------ | :-----------: | :------: |
+| `POST /api/urls`                      |      ✅       |    ✅    |
+| `GET /api/urls/:shortCode`            |      ✅       |    ✅    |
+| `GET /:shortCode`                     |      ✅       |    ✅    |
+| `PUT /api/urls/:shortCode`            |      ✅       | ❌ `404` |
+| `DELETE /api/urls/:shortCode`         |      ✅       | ❌ `404` |
+| `GET /api/urls/:shortCode/statistics` |      ✅       | ❌ `404` |
+
+關閉的效果是「路由不存在」，因此回應是 `404` 而不是 `403`，也不會執行任何 handler 邏輯。
+
+> **這是暴露面開關，不是認證。** 開啟時管理端點仍然沒有任何驗證，任何能連到服務的人都能改寫或刪除短網址。
+
+### 轉址目標白名單
+
+`DEMO_ALLOWED_HOSTS` 以逗號分隔 hostname（例如 `github.com,example.com`）。未設或空字串 = 不限制 host，但**協定仍只接受 `http:` / `https:`**。
+
+白名單有三層，分別守住不同階段的資料：
+
+| 層                | 端點                       | 被擋時 | 說明                                                                   |
+| :---------------- | :------------------------- | :----- | :--------------------------------------------------------------------- |
+| create            | `POST /api/urls`           | `400`  | `AllowedHostPipe` 檢查；DTO 先以 `protocols: ['http', 'https']` 擋協定 |
+| update            | `PUT /api/urls/:shortCode` | `400`  | 同上；管理 API 關閉時不會走到                                          |
+| redirect backstop | `GET /:shortCode`          | `404`  | 擋白名單收緊前就已存在的資料                                           |
+
+- 非 `http(s)` 在 create / update 會先被 DTO 擋下，回 `400 Invalid URL format.`。
+- Pipe 對「協定合法但 host 不在白名單」回 `400`，訊息為 `URL host is not allowed: <url>`。
+- redirect backstop 回 `404 Short Code '<shortCode>' not found.`，與查無短碼的回應一致，不額外洩漏「這筆資料存在但被擋」。
+
+### Hostname 比對規則
+
+- URL 一律經 `new URL()` 正規化：hostname 會小寫、IDN 轉 punycode、去掉 userinfo 與 port；尾點由 `isAllowedHost()` 自行去除。
+- 正規化後用 `isAllowedHost()` 做**精確比對**：`docs.example.com` 不會匹配 `example.com`。要允許子網域就逐條列出。
+- 只比對 hostname，不限制 port。
+
+| 白名單 `example.com`         | 結果                                            |
+| :--------------------------- | :---------------------------------------------- |
+| `https://example.com/x`      | ✅                                              |
+| `https://example.com./x`     | ✅ 尾點正規化                                   |
+| `https://EXAMPLE.com/x`      | ✅ 大小寫正規化                                 |
+| `https://example.com:8443/x` | ✅ port 不屬於 hostname                         |
+| `https://user@example.com/x` | ✅ userinfo 不影響 hostname                     |
+| `https://sub.example.com/x`  | ❌ 子網域需逐條列出                             |
+| `https://evil-example.com/x` | ❌ 後綴相似不算相符                             |
+| `ftp://example.com/x`        | ❌ 非 `http(s)`                                 |
+| `http://127.0.0.1/x`         | ❌ 白名單只有 `example.com` 時，IP 也需精確列出 |
+
+設定格式在啟動時驗證（`parseAllowedHosts()` / `validateAllowedHosts()`）：
+
+- 只接受 bare hostname：ASCII 字母、數字、`-`、`.`，每個 label 1–63 字元，總長不超過 253。
+- 不接受 scheme、port、path、wildcard、底線、Unicode；IDN 請寫 punycode（`xn--...`）。
+- 首尾空白與結尾的點會正規化；任一非法條目會丟出 `Invalid allowed host "<條目>"`，app 在 `AppModule` 載入階段就結束，不會開始監聽。
+
+```bash
+# 以下設定會讓 app 啟動失敗
+DEMO_ALLOWED_HOSTS='https://example.com' npm run start
+# Error: Invalid allowed host "https://example.com"
+```
+
+### Demo profile 範例
+
+```dotenv
+ENABLE_ADMIN_API=false
+DEMO_ALLOWED_HOSTS=github.com,example.com
+```
+
+效果：
+
+- 只剩 `POST /api/urls`、`GET /api/urls/:shortCode`、`GET /:shortCode`；管理端點回 `404`。
+- 建立與更新只能指向 `github.com` 或 `example.com`，且必須是 `http(s)`。
+- 白名單收緊前留下的其他 host 紀錄，轉址回 `404`。
+
+在 dev compose 驗證：
+
+```bash
+docker compose up -d
+curl -i -X DELETE http://localhost:3000/api/urls/abc123                          # 404
+curl -i -X POST http://localhost:3000/api/urls \
+  -H 'Content-Type: application/json' -d '{"url":"https://evil.example/phish"}'  # 400
+curl -i -X POST http://localhost:3000/api/urls \
+  -H 'Content-Type: application/json' -d '{"url":"ftp://github.com/file"}'       # 400 Invalid URL format.
+```
+
+### 已知限制
+
+- **只擋第一跳**：白名單限制的是本服務回給瀏覽器的 `Location`；目標網站後續要轉去哪，不在控制範圍。允許的 host 若自身有 open redirect，仍可能被利用。
+- 開關與白名單都在啟動時讀取，沒有 hot reload，修改需重啟。
+- 白名單為空時只限制協定，不限制 host。
+- 只比對字面 hostname，不解析 DNS。
+- `GET /api/urls/:shortCode` 不在開關範圍，demo profile 下仍可依短碼查到原始網址。
+- 不是認證，也不限制 `POST` 的呼叫者；公開部署仍需搭配限流（本專案已有）與其他層防護。
+
+背後的理由：公開的可寫短網址服務本質上就是一個 open redirect，會被拿去當釣魚連結的洗白管道。demo profile 因此關掉管理端點，並用白名單限制轉址目標。
+
 ## 失敗邊界
 
 快取與限流都採 **fail-open**：Redis 故障時不讓請求失敗，但會失去部分保護。
@@ -323,16 +445,23 @@ url-shortener/
 │   ├── redis/                   # RedisModule / RedisService / error helper
 │   ├── throttler/               # 全域限流、RedisThrottlerStorage
 │   ├── urls/
-│   │   ├── dto/                 # 請求與回應 DTO
-│   │   ├── urls.controller.ts   # POST /api/urls、GET /api/urls/:shortCode/statistics
-│   │   ├── redirect.controller.ts # GET /:shortCode
-│   │   ├── urls.service.ts      # 建立短網址、查詢
-│   │   ├── url-cache.service.ts # 快取讀寫與失效
-│   │   └── analytics.service.ts # 點擊紀錄與統計
+│   │   ├── dto/                      # 請求與回應 DTO
+│   │   ├── admin-urls.controller.ts  # PUT / DELETE / statistics（可由開關卸載）
+│   │   ├── urls.controller.ts        # POST /api/urls、GET /api/urls/:shortCode
+│   │   ├── allowed-host.pipe.ts      # create / update 的白名單驗證
+│   │   ├── allowed-hosts.ts          # host 正規化、格式驗證、精確比對
+│   │   ├── urls-module.options.ts    # register() 的 options 與 DI token
+│   │   ├── redirect.controller.ts    # GET /:shortCode（含 redirect backstop）
+│   │   ├── urls.service.ts           # 建立短網址、查詢
+│   │   ├── url-cache.service.ts      # 快取讀寫與失效
+│   │   └── analytics.service.ts      # 點擊紀錄與統計
 │   ├── app.module.ts
 │   ├── main.ts
-│   └── setup-app.ts             # 全域 pipe、路由前綴
-├── test/                        # E2E 測試；需 PostgreSQL + Redis DB15
+│   └── setup-app.ts                  # 全域 pipe、路由前綴
+├── test/                             # E2E 測試；需 PostgreSQL + Redis DB15
+│   ├── api-surface.e2e-spec.ts       # 管理 API 關閉時的路由面
+│   ├── demo-exposure.e2e-spec.ts     # demo profile 的三層白名單
+│   └── ...
 ├── Dockerfile                   # Multi-stage：dev / test / builder / prod
 ├── docker-compose.yml           # 開發：db + redis + app（bind mount + hot reload）
 ├── docker-compose.test.yml      # 測試：tmpfs Postgres + Redis + 單元 + E2E
@@ -342,7 +471,7 @@ url-shortener/
 
 ## 開發 Roadmap
 
-專案以 Git Flow 精神拆解為 8 個核心功能分支，依序開發：
+專案以 Git Flow 精神拆解為 9 個核心功能分支，依序開發：
 
 1. `feature/init-setup` — **專案初始化與基礎環境**（✅）
    - NestJS 初始化、Linter & Formatter 設定、Docker 環境配置
@@ -365,6 +494,10 @@ url-shortener/
    - `RedisThrottlerStorage`（Lua 原子計數、多 instance 共用）
    - fail-open 邊界、e2e 隔離與分散式限流測試
    - CI Redis service、效能基準
+9. `feat/api-surface` — **API 暴露面控制**（✅）
+   - `UrlsModule.register()` 動態模組與 `ENABLE_ADMIN_API` 開關（關閉時管理路由回 `404`）
+   - 轉址白名單三層（create / update 400、redirect 404）、精確 hostname、僅 `http` / `https`
+   - 白名單設定 fail-fast；`api-surface` 與 `demo-exposure` e2e
 
 ## License
 
